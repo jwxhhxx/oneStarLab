@@ -51,7 +51,7 @@ async function handleImport(e: Event) {
   try {
     await db.delete();
     await db.open();
-    await importDB(file, { clearTablesBeforeImport: true });
+    await importDB(file);
     await store.loadAll();
     ElMessage.success('数据导入成功，页面已刷新');
   } catch (e) {
