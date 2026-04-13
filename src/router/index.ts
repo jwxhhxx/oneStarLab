@@ -33,6 +33,12 @@ const router = createRouter({
       component: () => import('@/views/LabView.vue'),
       meta: { title: '研究所' },
     },
+    {
+      path: '/inspiration',
+      name: 'inspiration',
+      component: () => import('@/views/InspirationView.vue'),
+      meta: { title: '灵感生成' },
+    },
   ],
 });
 
