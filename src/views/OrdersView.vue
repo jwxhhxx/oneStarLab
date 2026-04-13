@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 
 import { useShopStore } from '@/stores/useShopStore';
-import type { NewOrderInput } from '@/types';
+import type { NewOrderInput, Order } from '@/types';
 import { formatCurrency } from '@/utils/pricing';
 
 const store = useShopStore();
 const dialogVisible = ref(false);
+const editingOrderId = ref<number | null>(null);
 
 const emptyForm = (): NewOrderInput => ({
   productId: 0,
@@ -54,13 +55,55 @@ const summaryCards = computed(() => {
 });
 
 function resetForm() {
+  editingOrderId.value = null;
   Object.assign(form, emptyForm());
+}
+
+function openCreateDialog() {
+  resetForm();
+  dialogVisible.value = true;
+}
+
+function openEditDialog(order: Order) {
+  const item = order.items[0];
+  editingOrderId.value = order.id ?? null;
+  Object.assign(form, {
+    productId: item?.productId ?? 0,
+    customerName: order.customerName,
+    channel: order.channel,
+    quantity: item?.quantity ?? 1,
+    discountAmount: order.discountAmount,
+    shippingCost: order.shippingCost,
+    platformFeeRate: order.totalAmount > 0 ? Number((order.platformFee / order.totalAmount).toFixed(4)) : 0,
+  });
+  dialogVisible.value = true;
+}
+
+async function handleDeleteOrder(id: number) {
+  try {
+    await ElMessageBox.confirm('删除后会自动回退对应商品库存，确认继续吗？', '删除订单', {
+      confirmButtonText: '确认删除',
+      cancelButtonText: '取消',
+      type: 'warning',
+    });
+    await store.deleteOrder(id);
+    ElMessage.success('订单已删除，库存已回退');
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') return;
+    ElMessage.error(error instanceof Error ? error.message : '删除订单失败');
+  }
 }
 
 async function submitOrder() {
   try {
-    await store.addOrder({ ...form });
-    ElMessage.success('订单已保存并自动扣减库存');
+    if (editingOrderId.value) {
+      await store.updateOrder(editingOrderId.value, { ...form });
+      ElMessage.success('订单已更新，库存已同步');
+    } else {
+      await store.addOrder({ ...form });
+      ElMessage.success('订单已保存并自动扣减库存');
+    }
+
     dialogVisible.value = false;
     resetForm();
   } catch (error) {
@@ -100,7 +143,7 @@ onMounted(() => {
           <h2>订单中心</h2>
           <div class="inline-tip">录单后自动计算利润并扣减库存</div>
         </div>
-        <el-button type="primary" @click="dialogVisible = true">新建订单</el-button>
+        <el-button type="primary" @click="openCreateDialog">新建订单</el-button>
       </div>
 
       <el-table :data="store.orders" empty-text="还没有订单，先录入一笔。">
@@ -121,10 +164,16 @@ onMounted(() => {
             <span class="insight-value">{{ formatCurrency(row.netProfit) }}</span>
           </template>
         </el-table-column>
+        <el-table-column label="操作" width="160" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="primary" @click="openEditDialog(row)">编辑</el-button>
+            <el-button link type="danger" @click="handleDeleteOrder(row.id!)">删除</el-button>
+          </template>
+        </el-table-column>
       </el-table>
     </el-card>
 
-    <el-dialog v-model="dialogVisible" title="录入订单" width="720px">
+    <el-dialog v-model="dialogVisible" :title="editingOrderId ? '编辑订单' : '录入订单'" width="720px">
       <el-form label-width="92px">
         <div class="form-grid">
           <el-form-item label="选择商品">
@@ -170,7 +219,7 @@ onMounted(() => {
 
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitOrder">保存订单</el-button>
+        <el-button type="primary" @click="submitOrder">{{ editingOrderId ? '更新订单' : '保存订单' }}</el-button>
       </template>
     </el-dialog>
   </div>

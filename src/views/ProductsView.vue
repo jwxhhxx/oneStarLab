@@ -3,11 +3,12 @@ import { computed, onMounted, reactive, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 
 import { useShopStore } from '@/stores/useShopStore';
-import type { ProductInput } from '@/types';
+import type { Product, ProductInput } from '@/types';
 import { formatCurrency } from '@/utils/pricing';
 
 const store = useShopStore();
 const dialogVisible = ref(false);
+const editingProductId = ref<number | null>(null);
 
 const emptyForm = (): ProductInput => ({
   name: '',
@@ -47,13 +48,51 @@ const summaryCards = computed(() => {
 });
 
 function resetForm() {
+  editingProductId.value = null;
   Object.assign(form, emptyForm());
+}
+
+function openCreateDialog() {
+  resetForm();
+  dialogVisible.value = true;
+}
+
+function openEditDialog(item: Product) {
+  editingProductId.value = item.id ?? null;
+  Object.assign(form, {
+    name: item.name,
+    sku: item.sku,
+    category: item.category,
+    supplier: item.supplier,
+    purchaseCost: item.purchaseCost,
+    packagingCost: item.packagingCost,
+    salePrice: item.salePrice,
+    stock: item.stock,
+    safeStock: item.safeStock,
+    note: item.note ?? '',
+  });
+  dialogVisible.value = true;
+}
+
+async function handleDeleteProduct(id: number) {
+  try {
+    await store.deleteProduct(id);
+    ElMessage.success('商品已删除');
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '删除失败');
+  }
 }
 
 async function submitProduct() {
   try {
-    await store.addProduct({ ...form });
-    ElMessage.success('商品已录入');
+    if (editingProductId.value) {
+      await store.updateProduct(editingProductId.value, { ...form });
+      ElMessage.success('商品已更新');
+    } else {
+      await store.addProduct({ ...form });
+      ElMessage.success('商品已录入');
+    }
+
     dialogVisible.value = false;
     resetForm();
   } catch (error) {
@@ -93,7 +132,7 @@ onMounted(() => {
           <h2>商品中心</h2>
           <div class="inline-tip">录入商品、查看库存、参考建议售价</div>
         </div>
-        <el-button type="primary" @click="dialogVisible = true">新增商品</el-button>
+        <el-button type="primary" @click="openCreateDialog">新增商品</el-button>
       </div>
 
       <el-table :data="tableRows" empty-text="暂无商品，先新增一条吧。">
@@ -121,10 +160,16 @@ onMounted(() => {
           </template>
         </el-table-column>
         <el-table-column prop="supplier" label="供应商" min-width="120" />
+        <el-table-column label="操作" width="150" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="primary" @click="openEditDialog(row)">编辑</el-button>
+            <el-button link type="danger" @click="handleDeleteProduct(row.id!)">删除</el-button>
+          </template>
+        </el-table-column>
       </el-table>
     </el-card>
 
-    <el-dialog v-model="dialogVisible" title="新增商品" width="720px">
+    <el-dialog v-model="dialogVisible" :title="editingProductId ? '编辑商品' : '新增商品'" width="720px">
       <el-form label-width="92px">
         <div class="form-grid">
           <el-form-item label="商品名称"><el-input v-model="form.name" /></el-form-item>
@@ -151,7 +196,7 @@ onMounted(() => {
 
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitProduct">保存商品</el-button>
+        <el-button type="primary" @click="submitProduct">{{ editingProductId ? '更新商品' : '保存商品' }}</el-button>
       </template>
     </el-dialog>
   </div>

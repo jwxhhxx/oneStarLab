@@ -1,6 +1,6 @@
 import dayjs from 'dayjs';
 import { computed, ref } from 'vue';
-import { defineStore } from 'pinia';
+import { acceptHMRUpdate, defineStore } from 'pinia';
 
 import { db, defaultPricingRule, seedDemoData, seedLabData } from '@/db/appDb';
 import type {
@@ -83,6 +83,59 @@ export const useShopStore = defineStore('shop', () => {
     await loadAll();
   }
 
+  async function updateProduct(id: number, input: ProductInput) {
+    const suggested = calculateSuggestedPrice(input.purchaseCost, input.packagingCost, pricingRule.value);
+
+    await db.products.update(id, {
+      ...input,
+      salePrice: input.salePrice > 0 ? input.salePrice : suggested,
+    });
+
+    await loadAll();
+  }
+
+  async function deleteProduct(id: number) {
+    await db.products.delete(id);
+    await loadAll();
+  }
+
+  function buildOrderPayload(
+    product: Product,
+    input: NewOrderInput,
+    overrides: Partial<Pick<Order, 'orderNo' | 'createdAt' | 'status'>> = {},
+  ) {
+    const originalAmount = Number((product.salePrice * input.quantity).toFixed(2));
+    const totalAmount = Number(Math.max(0, originalAmount - input.discountAmount).toFixed(2));
+    const platformFee = Number((totalAmount * input.platformFeeRate).toFixed(2));
+    const goodsCost = Number(((product.purchaseCost + product.packagingCost) * input.quantity).toFixed(2));
+    const netProfit = Number((totalAmount - input.shippingCost - platformFee - goodsCost).toFixed(2));
+
+    return {
+      orderNo: overrides.orderNo ?? `ORD-${dayjs().format('YYYYMMDD-HHmmss')}`,
+      channel: input.channel,
+      customerName: input.customerName,
+      items: [
+        {
+          productId: product.id!,
+          productName: product.name,
+          sku: product.sku,
+          quantity: input.quantity,
+          salePrice: product.salePrice,
+          totalAmount,
+          totalCost: goodsCost,
+        },
+      ],
+      totalAmount,
+      discountAmount: input.discountAmount,
+      shippingCost: input.shippingCost,
+      platformFee,
+      goodsCost,
+      netProfit,
+      createdAt: overrides.createdAt ?? new Date().toISOString(),
+      status: overrides.status ?? 'paid',
+    } satisfies Omit<Order, 'id'>;
+  }
+
   async function addOrder(input: NewOrderInput) {
     const product = await db.products.get(input.productId);
 
@@ -94,41 +147,83 @@ export const useShopStore = defineStore('shop', () => {
       throw new Error('库存不足，请先补货');
     }
 
-    const originalAmount = Number((product.salePrice * input.quantity).toFixed(2));
-    const totalAmount = Number(Math.max(0, originalAmount - input.discountAmount).toFixed(2));
-    const platformFee = Number((totalAmount * input.platformFeeRate).toFixed(2));
-    const goodsCost = Number(((product.purchaseCost + product.packagingCost) * input.quantity).toFixed(2));
-    const netProfit = Number((totalAmount - input.shippingCost - platformFee - goodsCost).toFixed(2));
+    const orderPayload = buildOrderPayload(product, input);
 
     await db.transaction('rw', db.orders, db.products, async () => {
-      await db.orders.add({
-        orderNo: `ORD-${dayjs().format('YYYYMMDD-HHmmss')}`,
-        channel: input.channel,
-        customerName: input.customerName,
-        items: [
-          {
-            productId: product.id!,
-            productName: product.name,
-            sku: product.sku,
-            quantity: input.quantity,
-            salePrice: product.salePrice,
-            totalAmount,
-            totalCost: goodsCost,
-          },
-        ],
-        totalAmount,
-        discountAmount: input.discountAmount,
-        shippingCost: input.shippingCost,
-        platformFee,
-        goodsCost,
-        netProfit,
-        createdAt: new Date().toISOString(),
-        status: 'paid',
-      });
+      await db.orders.add(orderPayload);
 
       await db.products.update(product.id!, {
         stock: product.stock - input.quantity,
       });
+    });
+
+    await loadAll();
+  }
+
+  async function updateOrder(id: number, input: NewOrderInput) {
+    const existingOrder = await db.orders.get(id);
+    if (!existingOrder) {
+      throw new Error('未找到订单');
+    }
+
+    const previousItem = existingOrder.items[0];
+    if (!previousItem) {
+      throw new Error('订单缺少商品信息');
+    }
+
+    await db.transaction('rw', db.orders, db.products, async () => {
+      const previousProduct = await db.products.get(previousItem.productId);
+      const nextProduct = await db.products.get(input.productId);
+
+      if (!nextProduct?.id) {
+        throw new Error('未找到商品');
+      }
+
+      if (previousProduct?.id && previousProduct.id !== nextProduct.id) {
+        await db.products.update(previousProduct.id, {
+          stock: previousProduct.stock + previousItem.quantity,
+        });
+      }
+
+      const availableStock = nextProduct.stock + (nextProduct.id === previousItem.productId ? previousItem.quantity : 0);
+      if (availableStock < input.quantity) {
+        throw new Error('库存不足，请先补货');
+      }
+
+      const orderPayload = buildOrderPayload(nextProduct, input, {
+        orderNo: existingOrder.orderNo,
+        createdAt: existingOrder.createdAt,
+        status: existingOrder.status,
+      });
+
+      await db.orders.update(id, orderPayload);
+      await db.products.update(nextProduct.id, {
+        stock: availableStock - input.quantity,
+      });
+    });
+
+    await loadAll();
+  }
+
+  async function deleteOrder(id: number) {
+    const existingOrder = await db.orders.get(id);
+    if (!existingOrder) {
+      throw new Error('未找到订单');
+    }
+
+    const previousItem = existingOrder.items[0];
+
+    await db.transaction('rw', db.orders, db.products, async () => {
+      if (previousItem) {
+        const product = await db.products.get(previousItem.productId);
+        if (product?.id) {
+          await db.products.update(product.id, {
+            stock: product.stock + previousItem.quantity,
+          });
+        }
+      }
+
+      await db.orders.delete(id);
     });
 
     await loadAll();
@@ -331,7 +426,11 @@ export const useShopStore = defineStore('shop', () => {
     upcomingLaunches,
     initialize,
     addProduct,
+    updateProduct,
+    deleteProduct,
     addOrder,
+    updateOrder,
+    deleteOrder,
     savePricingRule,
     addInspiration,
     updateInspiration,
@@ -346,3 +445,7 @@ export const useShopStore = defineStore('shop', () => {
     getMinPrice,
   };
 });
+
+if (import.meta.hot) {
+  import.meta.hot.accept(acceptHMRUpdate(useShopStore, import.meta.hot));
+}
