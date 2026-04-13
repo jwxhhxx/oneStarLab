@@ -1,12 +1,14 @@
 import dayjs from 'dayjs';
 import Dexie, { type Table } from 'dexie';
 
-import type { Order, Product, PricingRule } from '@/types';
+import type { LabInspiration, LabProject, Order, Product, PricingRule } from '@/types';
 
 class OneStarLabDb extends Dexie {
   products!: Table<Product, number>;
   orders!: Table<Order, number>;
   pricingRules!: Table<PricingRule, number>;
+  labInspirations!: Table<LabInspiration, number>;
+  labProjects!: Table<LabProject, number>;
 
   constructor() {
     super('oneStarLabDb');
@@ -15,6 +17,14 @@ class OneStarLabDb extends Dexie {
       products: '++id,sku,category,name,stock,createdAt',
       orders: '++id,orderNo,channel,createdAt,status',
       pricingRules: '++id',
+    });
+
+    this.version(2).stores({
+      products: '++id,sku,category,name,stock,createdAt',
+      orders: '++id,orderNo,channel,createdAt,status',
+      pricingRules: '++id',
+      labInspirations: '++id,status,tag,updatedAt',
+      labProjects: '++id,stage,launchDate,updatedAt',
     });
   }
 }
@@ -71,9 +81,71 @@ const demoProducts: Omit<Product, 'id'>[] = [
   },
 ];
 
+const demoInspirations: Omit<LabInspiration, 'id'>[] = [
+  {
+    title: '雾灰茶会系列',
+    tag: '春夏灵感',
+    status: '待打样',
+    summary: '偏奶油灰与浅茶棕的拼贴调性，适合做和纸胶带、便签与套装页。',
+    keywords: '留白 / 复古 / 低饱和',
+    image: '',
+    createdAt: dayjs().subtract(7, 'day').toISOString(),
+    updatedAt: dayjs().subtract(1, 'day').toISOString(),
+  },
+  {
+    title: '月光整理册',
+    tag: '新本册方向',
+    status: '灵感中',
+    summary: '用极简封面和轻纹理纸张做一本偏记录感的周计划本。',
+    keywords: '冷白 / 雾蓝 / 银灰',
+    image: '',
+    createdAt: dayjs().subtract(5, 'day').toISOString(),
+    updatedAt: dayjs().toISOString(),
+  },
+];
+
+const demoLabProjects: Omit<LabProject, 'id'>[] = [
+  {
+    name: '旧梦胶带套组',
+    category: '胶带',
+    stage: '打样中',
+    progress: 60,
+    launchDate: dayjs().add(8, 'day').format('YYYY-MM-DD'),
+    note: '第一版颜色略深，准备调浅一点。',
+    image: '',
+    sampleRecords: [
+      {
+        id: 'proof-1',
+        title: '第一轮打样',
+        date: dayjs().subtract(2, 'day').format('YYYY-MM-DD'),
+        note: '纸面显色偏深，需要降低蓝灰浓度。',
+        image: '',
+      },
+    ],
+    updatedAt: dayjs().toISOString(),
+  },
+  {
+    name: '研究所限定套装',
+    category: '套装',
+    stage: '排产中',
+    progress: 88,
+    launchDate: dayjs().add(14, 'day').format('YYYY-MM-DD'),
+    note: '清单已确认，等待供应商排期。',
+    image: '',
+    sampleRecords: [],
+    updatedAt: dayjs().subtract(1, 'day').toISOString(),
+  },
+];
+
+export async function seedLabData() {
+  await db.labInspirations.bulkAdd(demoInspirations);
+  await db.labProjects.bulkAdd(demoLabProjects);
+}
+
 export async function seedDemoData() {
   await db.products.bulkAdd(demoProducts);
   await db.pricingRules.put(defaultPricingRule);
+  await seedLabData();
 
   const products = await db.products.toArray();
   const tape = products.find((item) => item.sku === 'TAPE-001');

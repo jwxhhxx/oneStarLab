@@ -2,9 +2,30 @@ import dayjs from 'dayjs';
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 
-import { db, defaultPricingRule, seedDemoData } from '@/db/appDb';
-import type { NewOrderInput, Order, PricingRule, Product, ProductInput } from '@/types';
+import { db, defaultPricingRule, seedDemoData, seedLabData } from '@/db/appDb';
+import type {
+  InspirationInput,
+  LabInspiration,
+  LabProject,
+  LabProjectInput,
+  LabStage,
+  NewOrderInput,
+  Order,
+  PricingRule,
+  Product,
+  ProductInput,
+  ProofRecordInput,
+} from '@/types';
 import { calculateMinPrice, calculateSuggestedPrice } from '@/utils/pricing';
+
+const stageProgressMap: Record<LabStage, number> = {
+  灵感整理: 10,
+  设计中: 35,
+  打样中: 60,
+  排产中: 82,
+  待上新: 95,
+  已上新: 100,
+};
 
 export const useShopStore = defineStore('shop', () => {
   const loading = ref(false);
@@ -12,11 +33,15 @@ export const useShopStore = defineStore('shop', () => {
   const products = ref<Product[]>([]);
   const orders = ref<Order[]>([]);
   const pricingRule = ref<PricingRule>({ ...defaultPricingRule });
+  const labInspirations = ref<LabInspiration[]>([]);
+  const labProjects = ref<LabProject[]>([]);
 
   async function loadAll() {
     products.value = await db.products.orderBy('createdAt').reverse().toArray();
     orders.value = await db.orders.orderBy('createdAt').reverse().toArray();
     pricingRule.value = (await db.pricingRules.get(1)) ?? { ...defaultPricingRule };
+    labInspirations.value = await db.labInspirations.orderBy('updatedAt').reverse().toArray();
+    labProjects.value = await db.labProjects.orderBy('updatedAt').reverse().toArray();
   }
 
   async function initialize() {
@@ -26,11 +51,17 @@ export const useShopStore = defineStore('shop', () => {
     try {
       const productCount = await db.products.count();
       const rule = await db.pricingRules.get(1);
+      const inspirationCount = await db.labInspirations.count();
 
       if (productCount === 0) {
         await seedDemoData();
-      } else if (!rule) {
-        await db.pricingRules.put({ ...defaultPricingRule });
+      } else {
+        if (!rule) {
+          await db.pricingRules.put({ ...defaultPricingRule });
+        }
+        if (inspirationCount === 0) {
+          await seedLabData();
+        }
       }
 
       await loadAll();
@@ -109,6 +140,76 @@ export const useShopStore = defineStore('shop', () => {
     pricingRule.value = payload;
   }
 
+  async function addInspiration(input: InspirationInput) {
+    const now = new Date().toISOString();
+    await db.labInspirations.add({
+      ...input,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await loadAll();
+  }
+
+  async function updateInspiration(id: number, input: InspirationInput) {
+    await db.labInspirations.update(id, {
+      ...input,
+      updatedAt: new Date().toISOString(),
+    });
+    await loadAll();
+  }
+
+  async function addLabProject(input: LabProjectInput) {
+    await db.labProjects.add({
+      ...input,
+      progress: Math.max(input.progress, stageProgressMap[input.stage]),
+      sampleRecords: [],
+      updatedAt: new Date().toISOString(),
+    });
+    await loadAll();
+  }
+
+  async function updateLabProject(id: number, input: LabProjectInput) {
+    await db.labProjects.update(id, {
+      ...input,
+      progress: Math.max(input.progress, stageProgressMap[input.stage]),
+      updatedAt: new Date().toISOString(),
+    });
+    await loadAll();
+  }
+
+  async function updateLabProjectStage(id: number, stage: LabStage) {
+    const project = await db.labProjects.get(id);
+    if (!project) {
+      throw new Error('未找到研发产品');
+    }
+
+    await db.labProjects.update(id, {
+      stage,
+      progress: Math.max(project.progress, stageProgressMap[stage]),
+      updatedAt: new Date().toISOString(),
+    });
+    await loadAll();
+  }
+
+  async function addProofRecord(projectId: number, input: ProofRecordInput) {
+    const project = await db.labProjects.get(projectId);
+    if (!project) {
+      throw new Error('未找到研发产品');
+    }
+
+    await db.labProjects.update(projectId, {
+      sampleRecords: [
+        ...project.sampleRecords,
+        {
+          id: `proof-${Date.now()}`,
+          ...input,
+        },
+      ],
+      updatedAt: new Date().toISOString(),
+    });
+    await loadAll();
+  }
+
   function getSuggestedPrice(product: Product) {
     return calculateSuggestedPrice(product.purchaseCost, product.packagingCost, pricingRule.value);
   }
@@ -162,20 +263,36 @@ export const useShopStore = defineStore('shop', () => {
     }));
   });
 
+  const upcomingLaunches = computed(() =>
+    [...labProjects.value]
+      .filter((item) => item.launchDate)
+      .sort((a, b) => dayjs(a.launchDate).valueOf() - dayjs(b.launchDate).valueOf())
+      .slice(0, 6),
+  );
+
   return {
     loading,
     initialized,
     products,
     orders,
     pricingRule,
+    labInspirations,
+    labProjects,
     stats,
     lowStockProducts,
     recentOrders,
     monthlyTrend,
+    upcomingLaunches,
     initialize,
     addProduct,
     addOrder,
     savePricingRule,
+    addInspiration,
+    updateInspiration,
+    addLabProject,
+    updateLabProject,
+    updateLabProjectStage,
+    addProofRecord,
     getSuggestedPrice,
     getMinPrice,
   };

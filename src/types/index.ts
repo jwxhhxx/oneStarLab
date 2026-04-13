@@ -69,3 +69,65 @@ export interface NewOrderInput {
   shippingCost: number;
   platformFeeRate: number;
 }
+
+export type InspirationStatus = '灵感中' | '待打样' | '打样中' | '待上新';
+export type LabStage = '灵感整理' | '设计中' | '打样中' | '排产中' | '待上新' | '已上新';
+
+export interface LabInspiration {
+  id?: number;
+  title: string;
+  tag: string;
+  status: InspirationStatus;
+  summary: string;
+  keywords: string;
+  image?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProofRecord {
+  id: string;
+  title: string;
+  date: string;
+  note: string;
+  image?: string;
+}
+
+export interface LabProject {
+  id?: number;
+  name: string;
+  category: string;
+  stage: LabStage;
+  progress: number;
+  launchDate: string;
+  note: string;
+  image?: string;
+  sampleRecords: ProofRecord[];
+  updatedAt: string;
+}
+
+export interface InspirationInput {
+  title: string;
+  tag: string;
+  status: InspirationStatus;
+  summary: string;
+  keywords: string;
+  image?: string;
+}
+
+export interface LabProjectInput {
+  name: string;
+  category: string;
+  stage: LabStage;
+  progress: number;
+  launchDate: string;
+  note: string;
+  image?: string;
+}
+
+export interface ProofRecordInput {
+  title: string;
+  date: string;
+  note: string;
+  image?: string;
+}
