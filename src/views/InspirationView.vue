@@ -1,24 +1,11 @@
 <script setup lang="ts">
-import { computed, ref } from'vue';
-import { ElMessage } from'element-plus';
-
-type CategoryKey ='植物'|'食物'|'动物'|'日常用品'|'水果'|'盐系小元素';
-
-interface InspirationItem {
-  category: CategoryKey;
-  element: string;
-}
-
-interface InspirationRecord {
-  id: string;
-  items: InspirationItem[];
-  styles: string[];
-  createdAt: string;
-  completed: boolean;
-}
+import { computed, onMounted, ref } from 'vue';
+import { ElMessage } from 'element-plus';
+import { useShopStore } from '@/stores/useShopStore';
+import type { DrawingCategoryKey, DrawingInspirationItem, DrawingInspirationRecord } from '@/types';
 
 interface CategoryConfig {
-  label: CategoryKey;
+  label: DrawingCategoryKey;
   prefixes: string[];
   nouns: string[];
 }
@@ -86,10 +73,10 @@ const categoryPools = categoryConfigs.map((config) => ({
   pool: buildPool(config),
 }));
 
-const selectedCategories = ref<CategoryKey[]>(categoryConfigs.map((item) => item.label));
-const inspirationItems = ref<InspirationItem[]>([]);
+const store = useShopStore();
+const selectedCategories = ref<DrawingCategoryKey[]>(categoryConfigs.map((item) => item.label));
+const inspirationItems = ref<DrawingInspirationItem[]>([]);
 const styleKeywords = ref<string[]>([]);
-const inspirationRecords = ref<InspirationRecord[]>([]);
 
 const stylePool = [
  '水彩',
@@ -144,7 +131,7 @@ function generateInspiration() {
   const count = Math.random() > 0.5 ? 4 : 3;
   const categoryOrder = shuffle(selectedCategories.value);
 
-  const finalCategories: CategoryKey[] = [];
+  const finalCategories: DrawingCategoryKey[] = [];
   for (let i = 0; i < count; i += 1) {
     finalCategories.push(categoryOrder[i % categoryOrder.length]);
   }
@@ -165,33 +152,34 @@ function regenerate() {
   generateInspiration();
 }
 
-function applyCurrentInspiration() {
+async function applyCurrentInspiration() {
   if (!hasCurrentInspiration.value) {
     ElMessage.warning('请先生成一组灵感');
     return;
   }
 
-  inspirationRecords.value.unshift({
-    id: `record-${Date.now()}`,
+  await store.addDrawingInspiration({
     items: inspirationItems.value.map((item) => ({ ...item })),
     styles: [...styleKeywords.value],
     createdAt: new Date().toISOString(),
     completed: false,
   });
 
-  if (inspirationRecords.value.length > 30) {
-    inspirationRecords.value = inspirationRecords.value.slice(0, 30);
-  }
-
   ElMessage.success('已存档到灵感记录');
 }
 
-function deleteRecord(id: string) {
-  inspirationRecords.value = inspirationRecords.value.filter((record) => record.id !== id);
+async function deleteRecord(id: number) {
+  await store.deleteDrawingInspiration(id);
   ElMessage.success('记录已删除');
 }
 
+async function toggleCompleted(record: DrawingInspirationRecord) {
+  if (!record.id) return;
+  await store.updateDrawingInspiration(record.id, { completed: !record.completed });
+}
+
 generateInspiration();
+onMounted(() => store.initialize());
 </script>
 
 <template>
@@ -260,19 +248,19 @@ generateInspiration();
       <template #header>
         <div class="toolbar">
           <h3>灵感记录</h3>
-          <span class="inline-tip">点击“应用并存档”后会保存在这里（最多 30 条）</span>
+          <span class="inline-tip">点击"应用并存档"后会保存在这里</span>
         </div>
       </template>
 
-      <div v-if="inspirationRecords.length === 0" class="dialog-tip">还没有存档记录，先生成并应用一组灵感吧。</div>
+      <div v-if="store.drawingInspirations.length === 0" class="dialog-tip">还没有存档记录，先生成并应用一组灵感吧。</div>
 
       <div v-else class="record-list">
-        <div v-for="record in inspirationRecords" :key="record.id" class="record-item" :class="{ 'record-item--done': record.completed }">
+        <div v-for="record in store.drawingInspirations" :key="record.id" class="record-item" :class="{ 'record-item--done': record.completed }">
           <div class="record-head">
             <div class="record-time">{{ new Date(record.createdAt).toLocaleString('zh-CN') }}</div>
             <div class="record-actions">
-              <el-checkbox v-model="record.completed">已完成</el-checkbox>
-              <el-button link type="danger" @click="deleteRecord(record.id)">删除</el-button>
+              <el-checkbox :model-value="record.completed" @change="toggleCompleted(record)">已完成</el-checkbox>
+              <el-button link type="danger" @click="() => record.id !== undefined && deleteRecord(record.id)">删除</el-button>
             </div>
           </div>
 

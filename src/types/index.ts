@@ -131,3 +131,18 @@ export interface ProofRecordInput {
   note: string;
   image?: string;
 }
+
+export type DrawingCategoryKey = '植物' | '食物' | '动物' | '日常用品' | '水果' | '盐系小元素';
+
+export interface DrawingInspirationItem {
+  category: DrawingCategoryKey;
+  element: string;
+}
+
+export interface DrawingInspirationRecord {
+  id?: number;
+  items: DrawingInspirationItem[];
+  styles: string[];
+  createdAt: string;
+  completed: boolean;
+}

@@ -1,6 +1,6 @@
 import Dexie, { type Table } from 'dexie';
 
-import type { LabInspiration, LabProject, Order, Product, PricingRule } from '@/types';
+import type { DrawingInspirationRecord, LabInspiration, LabProject, Order, Product, PricingRule } from '@/types';
 
 class OneStarLabDb extends Dexie {
   products!: Table<Product, number>;
@@ -8,6 +8,7 @@ class OneStarLabDb extends Dexie {
   pricingRules!: Table<PricingRule, number>;
   labInspirations!: Table<LabInspiration, number>;
   labProjects!: Table<LabProject, number>;
+  drawingInspirations!: Table<DrawingInspirationRecord, number>;
 
   constructor() {
     super('oneStarLabDb');
@@ -24,6 +25,15 @@ class OneStarLabDb extends Dexie {
       pricingRules: '++id',
       labInspirations: '++id,status,tag,updatedAt',
       labProjects: '++id,stage,launchDate,updatedAt',
+    });
+
+    this.version(3).stores({
+      products: '++id,sku,category,name,stock,createdAt',
+      orders: '++id,orderNo,channel,createdAt,status',
+      pricingRules: '++id',
+      labInspirations: '++id,status,tag,updatedAt',
+      labProjects: '++id,stage,launchDate,updatedAt',
+      drawingInspirations: '++id,createdAt,completed',
     });
   }
 }

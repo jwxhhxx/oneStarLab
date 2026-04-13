@@ -4,6 +4,7 @@ import { acceptHMRUpdate, defineStore } from 'pinia';
 
 import { db, defaultPricingRule } from '@/db/appDb';
 import type {
+  DrawingInspirationRecord,
   InspirationInput,
   LabInspiration,
   LabProject,
@@ -35,6 +36,7 @@ export const useShopStore = defineStore('shop', () => {
   const pricingRule = ref<PricingRule>({ ...defaultPricingRule });
   const labInspirations = ref<LabInspiration[]>([]);
   const labProjects = ref<LabProject[]>([]);
+  const drawingInspirations = ref<DrawingInspirationRecord[]>([]);
 
   async function loadAll() {
     products.value = await db.products.orderBy('createdAt').reverse().toArray();
@@ -42,6 +44,7 @@ export const useShopStore = defineStore('shop', () => {
     pricingRule.value = (await db.pricingRules.get(1)) ?? { ...defaultPricingRule };
     labInspirations.value = await db.labInspirations.orderBy('updatedAt').reverse().toArray();
     labProjects.value = await db.labProjects.orderBy('updatedAt').reverse().toArray();
+    drawingInspirations.value = await db.drawingInspirations.orderBy('createdAt').reverse().toArray();
   }
 
   async function initialize() {
@@ -402,6 +405,21 @@ export const useShopStore = defineStore('shop', () => {
       .slice(0, 6),
   );
 
+  async function addDrawingInspiration(record: Omit<DrawingInspirationRecord, 'id'>) {
+    await db.drawingInspirations.add(record);
+    await loadAll();
+  }
+
+  async function updateDrawingInspiration(id: number, patch: Partial<DrawingInspirationRecord>) {
+    await db.drawingInspirations.update(id, patch);
+    await loadAll();
+  }
+
+  async function deleteDrawingInspiration(id: number) {
+    await db.drawingInspirations.delete(id);
+    await loadAll();
+  }
+
   return {
     loading,
     initialized,
@@ -410,11 +428,13 @@ export const useShopStore = defineStore('shop', () => {
     pricingRule,
     labInspirations,
     labProjects,
+    drawingInspirations,
     stats,
     lowStockProducts,
     recentOrders,
     monthlyTrend,
     upcomingLaunches,
+    loadAll,
     initialize,
     addProduct,
     updateProduct,
@@ -432,6 +452,9 @@ export const useShopStore = defineStore('shop', () => {
     addProofRecord,
     deleteLabProject,
     convertLabProjectToProduct,
+    addDrawingInspiration,
+    updateDrawingInspiration,
+    deleteDrawingInspiration,
     getSuggestedPrice,
     getMinPrice,
   };
