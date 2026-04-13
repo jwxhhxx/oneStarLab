@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 
 import { useShopStore } from '@/stores/useShopStore';
@@ -9,6 +9,12 @@ import { formatCurrency } from '@/utils/pricing';
 const store = useShopStore();
 const dialogVisible = ref(false);
 const editingOrderId = ref<number | null>(null);
+const isMobile = ref(false);
+
+let mediaQuery: MediaQueryList | null = null;
+const handleViewportChange = (event: MediaQueryListEvent) => {
+  isMobile.value = event.matches;
+};
 
 const emptyForm = (): NewOrderInput => ({
   productId: 0,
@@ -112,7 +118,14 @@ async function submitOrder() {
 }
 
 onMounted(() => {
+  mediaQuery = window.matchMedia('(max-width: 768px)');
+  isMobile.value = mediaQuery.matches;
+  mediaQuery.addEventListener('change', handleViewportChange);
   store.initialize();
+});
+
+onUnmounted(() => {
+  mediaQuery?.removeEventListener('change', handleViewportChange);
 });
 </script>
 
@@ -146,35 +159,43 @@ onMounted(() => {
         <el-button type="primary" @click="openCreateDialog">新建订单</el-button>
       </div>
 
-      <el-table :data="store.orders" empty-text="还没有订单，先录入一笔。">
-        <el-table-column prop="orderNo" label="订单号" min-width="170" />
-        <el-table-column prop="channel" label="渠道" width="100" />
-        <el-table-column prop="customerName" label="客户" width="120" />
-        <el-table-column label="商品" min-width="180">
-          <template #default="{ row }">{{ row.items[0]?.productName ?? '-' }}</template>
-        </el-table-column>
-        <el-table-column label="销售额" width="110">
-          <template #default="{ row }">{{ formatCurrency(row.totalAmount) }}</template>
-        </el-table-column>
-        <el-table-column label="商品成本" width="110">
-          <template #default="{ row }">{{ formatCurrency(row.goodsCost) }}</template>
-        </el-table-column>
-        <el-table-column label="净利润" width="110">
-          <template #default="{ row }">
-            <span class="insight-value">{{ formatCurrency(row.netProfit) }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="160" fixed="right">
-          <template #default="{ row }">
-            <el-button link type="primary" @click="openEditDialog(row)">编辑</el-button>
-            <el-button link type="danger" @click="handleDeleteOrder(row.id!)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+      <div class="table-scroll">
+        <el-table :data="store.orders" empty-text="还没有订单，先录入一笔。">
+          <el-table-column prop="orderNo" label="订单号" min-width="170" />
+          <el-table-column prop="channel" label="渠道" width="100" />
+          <el-table-column prop="customerName" label="客户" width="120" />
+          <el-table-column label="商品" min-width="180">
+            <template #default="{ row }">{{ row.items[0]?.productName ?? '-' }}</template>
+          </el-table-column>
+          <el-table-column label="销售额" width="110">
+            <template #default="{ row }">{{ formatCurrency(row.totalAmount) }}</template>
+          </el-table-column>
+          <el-table-column label="商品成本" width="110">
+            <template #default="{ row }">{{ formatCurrency(row.goodsCost) }}</template>
+          </el-table-column>
+          <el-table-column label="净利润" width="110">
+            <template #default="{ row }">
+              <span class="insight-value">{{ formatCurrency(row.netProfit) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="160" fixed="right">
+            <template #default="{ row }">
+              <el-button link type="primary" @click="openEditDialog(row)">编辑</el-button>
+              <el-button link type="danger" @click="handleDeleteOrder(row.id!)">删除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
     </el-card>
 
-    <el-dialog v-model="dialogVisible" :title="editingOrderId ? '编辑订单' : '录入订单'" width="720px">
-      <el-form label-width="92px">
+    <el-dialog
+      v-model="dialogVisible"
+      :title="editingOrderId ? '编辑订单' : '录入订单'"
+      :fullscreen="isMobile"
+      width="720px"
+      class="mobile-form-dialog"
+    >
+      <el-form :label-width="isMobile ? 'auto' : '92px'" :label-position="isMobile ? 'top' : 'right'">
         <div class="form-grid">
           <el-form-item label="选择商品">
             <el-select v-model="form.productId" placeholder="请选择商品">
@@ -218,8 +239,10 @@ onMounted(() => {
       </div>
 
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitOrder">{{ editingOrderId ? '更新订单' : '保存订单' }}</el-button>
+        <div class="dialog-actions">
+          <el-button @click="dialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="submitOrder">{{ editingOrderId ? '更新订单' : '保存订单' }}</el-button>
+        </div>
       </template>
     </el-dialog>
   </div>

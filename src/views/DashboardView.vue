@@ -160,16 +160,18 @@ onUnmounted(() => {
           </div>
         </template>
 
-        <el-table :data="store.lowStockProducts" empty-text="暂无预警商品">
-          <el-table-column prop="name" label="商品" min-width="180" />
-          <el-table-column prop="sku" label="SKU" width="140" />
-          <el-table-column label="当前库存" width="100">
-            <template #default="{ row }">
-              <el-tag type="danger" round>{{ row.stock }}</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="safeStock" label="安全库存" width="100" />
-        </el-table>
+        <div class="table-scroll">
+          <el-table :data="store.lowStockProducts" empty-text="暂无预警商品">
+            <el-table-column prop="name" label="商品" min-width="180" />
+            <el-table-column prop="sku" label="SKU" width="140" />
+            <el-table-column label="当前库存" width="100">
+              <template #default="{ row }">
+                <el-tag type="danger" round>{{ row.stock }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="safeStock" label="安全库存" width="100" />
+          </el-table>
+        </div>
       </el-card>
 
       <el-card class="section-card soft-table">
@@ -180,16 +182,18 @@ onUnmounted(() => {
           </div>
         </template>
 
-        <el-table :data="store.recentOrders" empty-text="暂无订单">
-          <el-table-column prop="orderNo" label="订单号" min-width="160" />
-          <el-table-column prop="channel" label="渠道" width="90" />
-          <el-table-column prop="customerName" label="客户" width="110" />
-          <el-table-column label="净利润" width="110">
-            <template #default="{ row }">
-              <span class="insight-value">{{ formatCurrency(row.netProfit) }}</span>
-            </template>
-          </el-table-column>
-        </el-table>
+        <div class="table-scroll">
+          <el-table :data="store.recentOrders" empty-text="暂无订单">
+            <el-table-column prop="orderNo" label="订单号" min-width="160" />
+            <el-table-column prop="channel" label="渠道" width="90" />
+            <el-table-column prop="customerName" label="客户" width="110" />
+            <el-table-column label="净利润" width="110">
+              <template #default="{ row }">
+                <span class="insight-value">{{ formatCurrency(row.netProfit) }}</span>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
       </el-card>
     </div>
   </div>

@@ -147,21 +147,23 @@ onMounted(() => {
         </div>
       </template>
 
-      <el-table :data="store.products">
-        <el-table-column prop="name" label="商品" min-width="180" />
-        <el-table-column prop="sku" label="SKU" width="140" />
-        <el-table-column label="当前售价" width="120">
-          <template #default="{ row }">{{ formatCurrency(row.salePrice) }}</template>
-        </el-table-column>
-        <el-table-column label="建议售价" width="120">
-          <template #default="{ row }">
-            <span class="insight-value">{{ formatCurrency(store.getSuggestedPrice(row)) }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="最低售价" width="120">
-          <template #default="{ row }">{{ formatCurrency(store.getMinPrice(row)) }}</template>
-        </el-table-column>
-      </el-table>
+      <div class="table-scroll">
+        <el-table :data="store.products">
+          <el-table-column prop="name" label="商品" min-width="180" />
+          <el-table-column prop="sku" label="SKU" width="140" />
+          <el-table-column label="当前售价" width="120">
+            <template #default="{ row }">{{ formatCurrency(row.salePrice) }}</template>
+          </el-table-column>
+          <el-table-column label="建议售价" width="120">
+            <template #default="{ row }">
+              <span class="insight-value">{{ formatCurrency(store.getSuggestedPrice(row)) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="最低售价" width="120">
+            <template #default="{ row }">{{ formatCurrency(store.getMinPrice(row)) }}</template>
+          </el-table-column>
+        </el-table>
+      </div>
     </el-card>
   </div>
 </template>

@@ -16,7 +16,7 @@
 html,
 body {
   margin: 0;
-  min-width: 1220px;
+  min-width: 0;
   background: transparent;
 }
 
@@ -122,6 +122,10 @@ body {
 
 .app-content-shell {
   background: transparent;
+}
+
+.mobile-topbar {
+  display: none;
 }
 
 .app-header {
@@ -597,5 +601,316 @@ body {
   margin-top: 12px;
   color: #7a8599;
   font-size: 13px;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table-scroll .el-table {
+  min-width: 680px;
+}
+
+@media (max-width: 1024px) {
+  .app-header {
+    margin: 12px 14px 0;
+    padding: 16px;
+    border-radius: 18px;
+  }
+
+  .app-main {
+    padding: 14px;
+  }
+
+  .grid-two {
+    grid-template-columns: 1fr;
+  }
+
+  .metric-grid,
+  .summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .form-grid,
+  .result-box {
+    grid-template-columns: 1fr;
+  }
+
+  .lab-progress-item__body {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .lab-record {
+    grid-template-columns: 1fr;
+  }
+
+  .lab-record__image {
+    width: 100%;
+    max-width: 220px;
+    height: auto;
+  }
+}
+
+@media (max-width: 768px) {
+  :root {
+    background:
+      radial-gradient(circle at top left, rgba(129, 140, 248, 0.16), transparent 0, transparent 36%),
+      radial-gradient(circle at top right, rgba(251, 191, 211, 0.2), transparent 0, transparent 30%),
+      #f6f7fb;
+  }
+
+  body {
+    overflow-x: hidden;
+  }
+
+  .app-shell {
+    flex-direction: column;
+  }
+
+  .mobile-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: calc(env(safe-area-inset-top) + 8px) 10px 8px;
+    background: rgba(246, 247, 251, 0.9);
+    backdrop-filter: blur(8px);
+  }
+
+  .mobile-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .mobile-brand strong {
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .app-header {
+    flex-direction: column;
+    align-items: flex-start;
+    margin: 10px 10px 0;
+    padding: 14px;
+    gap: 12px;
+  }
+
+  .header-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .header-actions .el-tag {
+    min-height: 32px;
+    line-height: 30px;
+  }
+
+  .page-intro h1 {
+    font-size: 22px;
+  }
+
+  .page-intro p {
+    font-size: 13px;
+  }
+
+  .app-main {
+    padding: 10px;
+  }
+
+  .page-stack {
+    gap: 12px;
+  }
+
+  .page-hero {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 14px;
+    border-radius: 16px;
+  }
+
+  .hero-title {
+    font-size: 22px;
+  }
+
+  .hero-description {
+    font-size: 13px;
+    max-width: none;
+  }
+
+  .hero-badges {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .metric-grid,
+  .summary-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .summary-tile span,
+  .metric-value {
+    font-size: 22px;
+  }
+
+  .toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .toolbar :is(.el-button, .el-select, .el-input-number) {
+    width: 100%;
+  }
+
+  .toolbar .el-button,
+  .actions-row .el-button,
+  .lab-card__actions .el-button {
+    min-height: 40px;
+  }
+
+  .chart-box {
+    height: 240px;
+  }
+
+  .lab-card,
+  .lab-progress-item,
+  .insight-item {
+    padding: 10px;
+  }
+
+  .lab-card__top,
+  .lab-card__footer,
+  .lab-progress-item__head,
+  .record-head,
+  .record-actions {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .lab-card__actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .file-upload__preview {
+    width: 100%;
+    height: auto;
+    max-width: 260px;
+  }
+
+  .lab-calendar .el-calendar-table .el-calendar-day {
+    height: 72px;
+    padding: 4px;
+  }
+
+  .lab-calendar-cell {
+    min-height: 56px;
+    gap: 4px;
+  }
+
+  .el-dialog {
+    width: calc(100vw - 20px) !important;
+    max-width: 100vw;
+    margin-top: 6vh !important;
+  }
+
+  .el-dialog .el-dialog__body {
+    padding: 14px;
+  }
+
+  .mobile-form-dialog .el-dialog__header {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    padding: 12px 14px;
+    background: #fff;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+  }
+
+  .mobile-form-dialog .el-dialog__body {
+    padding-bottom: 84px;
+  }
+
+  .mobile-form-dialog .el-form-item {
+    margin-bottom: 14px;
+  }
+
+  .mobile-form-dialog .el-input,
+  .mobile-form-dialog .el-select,
+  .mobile-form-dialog .el-input-number,
+  .mobile-form-dialog .el-date-editor {
+    width: 100%;
+  }
+
+  .mobile-form-dialog .el-dialog__footer {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+    padding: 10px 14px calc(env(safe-area-inset-bottom) + 10px);
+    background: rgba(255, 255, 255, 0.96);
+    border-top: 1px solid rgba(148, 163, 184, 0.18);
+  }
+
+  .dialog-actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .dialog-actions .el-button {
+    flex: 1;
+    min-height: 42px;
+  }
+
+  .mobile-menu-drawer .el-drawer__header {
+    margin-bottom: 8px;
+    padding: 12px;
+  }
+
+  .mobile-menu-drawer .el-drawer__body {
+    padding: 0 12px 14px;
+  }
+
+  .mobile-menu-drawer .brand-title {
+    font-size: 18px;
+  }
+
+  .mobile-menu-drawer .brand-subtitle {
+    font-size: 12px;
+  }
+
+  .mobile-side-menu {
+    border-right: none !important;
+    background: transparent !important;
+  }
+
+  .mobile-side-menu .el-menu-item {
+    margin: 6px 0;
+    border-radius: 12px;
+    height: 42px;
+    line-height: 42px;
+    color: #4f5f78;
+    background: #f7f9ff;
+  }
+
+  .mobile-side-menu .el-menu-item.is-active {
+    background: #e9eeff;
+    color: #4258ee;
+  }
 }
 

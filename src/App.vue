@@ -1,9 +1,37 @@
 <script setup lang="ts">
-import { Calendar, DataAnalysis, EditPen, Files, Goods, MagicStick, Money, Tickets } from '@element-plus/icons-vue';
-import { computed } from 'vue';
+import { Calendar, DataAnalysis, EditPen, Files, Goods, MagicStick, Menu, Money, Tickets } from '@element-plus/icons-vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 
 const route = useRoute();
+const isMobile = ref(false);
+const mobileMenuVisible = ref(false);
+
+let mediaQuery: MediaQueryList | null = null;
+
+function handleViewportChange(event: MediaQueryListEvent) {
+  isMobile.value = event.matches;
+  if (!event.matches) {
+    mobileMenuVisible.value = false;
+  }
+}
+
+onMounted(() => {
+  mediaQuery = window.matchMedia('(max-width: 768px)');
+  isMobile.value = mediaQuery.matches;
+  mediaQuery.addEventListener('change', handleViewportChange);
+});
+
+onUnmounted(() => {
+  mediaQuery?.removeEventListener('change', handleViewportChange);
+});
+
+watch(
+  () => route.path,
+  () => {
+    mobileMenuVisible.value = false;
+  },
+);
 
 const menus = [
   { path: '/', label: '经营看板', icon: DataAnalysis },
@@ -27,7 +55,7 @@ const todayText = computed(() =>
 
 <template>
   <el-container class="app-shell">
-    <el-aside width="240px" class="app-sidebar">
+    <el-aside v-if="!isMobile" width="240px" class="app-sidebar">
       <div class="brand-panel">
         <div class="brand-chip">OneStarLab</div>
         <div class="brand-title">手帐店铺助手</div>
@@ -48,6 +76,16 @@ const todayText = computed(() =>
     </el-aside>
 
     <el-container class="app-content-shell">
+      <div v-if="isMobile" class="mobile-topbar">
+        <div class="mobile-brand">
+          <div class="brand-chip">OneStarLab</div>
+          <strong>手帐店铺助手</strong>
+        </div>
+        <el-button circle @click="mobileMenuVisible = true">
+          <el-icon><Menu /></el-icon>
+        </el-button>
+      </div>
+
       <el-header class="app-header">
         <div class="page-intro">
           <div class="header-kicker">
@@ -68,5 +106,22 @@ const todayText = computed(() =>
         <router-view />
       </el-main>
     </el-container>
+
+    <el-drawer v-model="mobileMenuVisible" direction="ltr" size="82%" class="mobile-menu-drawer">
+      <template #header>
+        <div class="brand-panel" style="margin: 0">
+          <div class="brand-chip">OneStarLab</div>
+          <div class="brand-title">手帐店铺助手</div>
+          <div class="brand-subtitle">库存、利润、定价都放进一个清爽后台。</div>
+        </div>
+      </template>
+
+      <el-menu router :default-active="route.path" class="side-menu mobile-side-menu">
+        <el-menu-item v-for="item in menus" :key="item.path" :index="item.path">
+          <el-icon><component :is="item.icon" /></el-icon>
+          <span>{{ item.label }}</span>
+        </el-menu-item>
+      </el-menu>
+    </el-drawer>
   </el-container>
 </template>

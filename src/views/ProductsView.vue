@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 
 import { useShopStore } from '@/stores/useShopStore';
@@ -9,6 +9,12 @@ import { formatCurrency } from '@/utils/pricing';
 const store = useShopStore();
 const dialogVisible = ref(false);
 const editingProductId = ref<number | null>(null);
+const isMobile = ref(false);
+
+let mediaQuery: MediaQueryList | null = null;
+const handleViewportChange = (event: MediaQueryListEvent) => {
+  isMobile.value = event.matches;
+};
 
 const emptyForm = (): ProductInput => ({
   name: '',
@@ -101,7 +107,14 @@ async function submitProduct() {
 }
 
 onMounted(() => {
+  mediaQuery = window.matchMedia('(max-width: 768px)');
+  isMobile.value = mediaQuery.matches;
+  mediaQuery.addEventListener('change', handleViewportChange);
   store.initialize();
+});
+
+onUnmounted(() => {
+  mediaQuery?.removeEventListener('change', handleViewportChange);
 });
 </script>
 
@@ -135,42 +148,50 @@ onMounted(() => {
         <el-button type="primary" @click="openCreateDialog">新增商品</el-button>
       </div>
 
-      <el-table :data="tableRows" empty-text="暂无商品，先新增一条吧。">
-        <el-table-column prop="name" label="商品名称" min-width="220" />
-        <el-table-column label="分类" width="100">
-          <template #default="{ row }">
-            <el-tag effect="plain" round>{{ row.category }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="sku" label="SKU" width="140" />
-        <el-table-column label="成本" width="120">
-          <template #default="{ row }">{{ formatCurrency(row.purchaseCost + row.packagingCost) }}</template>
-        </el-table-column>
-        <el-table-column label="当前售价" width="120">
-          <template #default="{ row }">{{ formatCurrency(row.salePrice) }}</template>
-        </el-table-column>
-        <el-table-column label="建议售价" width="120">
-          <template #default="{ row }">
-            <span class="insight-value">{{ formatCurrency(row.suggestedPrice) }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="库存" width="110">
-          <template #default="{ row }">
-            <el-tag :type="row.isLowStock ? 'danger' : 'success'" round>{{ row.stock }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="supplier" label="供应商" min-width="120" />
-        <el-table-column label="操作" width="150" fixed="right">
-          <template #default="{ row }">
-            <el-button link type="primary" @click="openEditDialog(row)">编辑</el-button>
-            <el-button link type="danger" @click="handleDeleteProduct(row.id!)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+      <div class="table-scroll">
+        <el-table :data="tableRows" empty-text="暂无商品，先新增一条吧。">
+          <el-table-column prop="name" label="商品名称" min-width="220" />
+          <el-table-column label="分类" width="100">
+            <template #default="{ row }">
+              <el-tag effect="plain" round>{{ row.category }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="sku" label="SKU" width="140" />
+          <el-table-column label="成本" width="120">
+            <template #default="{ row }">{{ formatCurrency(row.purchaseCost + row.packagingCost) }}</template>
+          </el-table-column>
+          <el-table-column label="当前售价" width="120">
+            <template #default="{ row }">{{ formatCurrency(row.salePrice) }}</template>
+          </el-table-column>
+          <el-table-column label="建议售价" width="120">
+            <template #default="{ row }">
+              <span class="insight-value">{{ formatCurrency(row.suggestedPrice) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="库存" width="110">
+            <template #default="{ row }">
+              <el-tag :type="row.isLowStock ? 'danger' : 'success'" round>{{ row.stock }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="supplier" label="供应商" min-width="120" />
+          <el-table-column label="操作" width="150" fixed="right">
+            <template #default="{ row }">
+              <el-button link type="primary" @click="openEditDialog(row)">编辑</el-button>
+              <el-button link type="danger" @click="handleDeleteProduct(row.id!)">删除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
     </el-card>
 
-    <el-dialog v-model="dialogVisible" :title="editingProductId ? '编辑商品' : '新增商品'" width="720px">
-      <el-form label-width="92px">
+    <el-dialog
+      v-model="dialogVisible"
+      :title="editingProductId ? '编辑商品' : '新增商品'"
+      :fullscreen="isMobile"
+      width="720px"
+      class="mobile-form-dialog"
+    >
+      <el-form :label-width="isMobile ? 'auto' : '92px'" :label-position="isMobile ? 'top' : 'right'">
         <div class="form-grid">
           <el-form-item label="商品名称"><el-input v-model="form.name" /></el-form-item>
           <el-form-item label="SKU"><el-input v-model="form.sku" /></el-form-item>
@@ -195,8 +216,10 @@ onMounted(() => {
       <div class="dialog-tip">如果不填写售价，系统会自动按当前定价规则给出建议值。</div>
 
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitProduct">{{ editingProductId ? '更新商品' : '保存商品' }}</el-button>
+        <div class="dialog-actions">
+          <el-button @click="dialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="submitProduct">{{ editingProductId ? '更新商品' : '保存商品' }}</el-button>
+        </div>
       </template>
     </el-dialog>
   </div>

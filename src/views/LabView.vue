@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import dayjs from 'dayjs';
 import { ElMessage } from 'element-plus';
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
 
 import { useShopStore } from '@/stores/useShopStore';
 import type { InspirationInput, LabInspiration, LabProject, LabProjectInput, LabStage, ProofRecordInput } from '@/types';
@@ -14,6 +14,12 @@ const proofDialogVisible = ref(false);
 const editingInspirationId = ref<number | null>(null);
 const editingProjectId = ref<number | null>(null);
 const proofTargetProjectId = ref<number | null>(null);
+const isMobile = ref(false);
+
+let mediaQuery: MediaQueryList | null = null;
+const handleViewportChange = (event: MediaQueryListEvent) => {
+  isMobile.value = event.matches;
+};
 
 const stageOptions: LabStage[] = ['灵感整理', '设计中', '打样中', '排产中', '待上新', '已上新'];
 
@@ -236,7 +242,14 @@ async function handleImageUpload(event: Event, target: 'inspiration' | 'project'
 }
 
 onMounted(() => {
+  mediaQuery = window.matchMedia('(max-width: 768px)');
+  isMobile.value = mediaQuery.matches;
+  mediaQuery.addEventListener('change', handleViewportChange);
   store.initialize();
+});
+
+onUnmounted(() => {
+  mediaQuery?.removeEventListener('change', handleViewportChange);
 });
 </script>
 
@@ -393,16 +406,18 @@ onMounted(() => {
             </div>
           </template>
 
-          <el-table :data="store.upcomingLaunches">
-            <el-table-column prop="name" label="产品" min-width="140" />
-            <el-table-column prop="stage" label="阶段" width="110" />
-            <el-table-column prop="launchDate" label="上新日期" width="120" />
-            <el-table-column label="进度" width="90">
-              <template #default="{ row }">
-                <span class="insight-value">{{ row.progress }}%</span>
-              </template>
-            </el-table-column>
-          </el-table>
+          <div class="table-scroll">
+            <el-table :data="store.upcomingLaunches">
+              <el-table-column prop="name" label="产品" min-width="140" />
+              <el-table-column prop="stage" label="阶段" width="110" />
+              <el-table-column prop="launchDate" label="上新日期" width="120" />
+              <el-table-column label="进度" width="90">
+                <template #default="{ row }">
+                  <span class="insight-value">{{ row.progress }}%</span>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
           <div class="dialog-tip">生产完成后可直接点“转正式商品”，系统会自动同步到商品中心。</div>
         </el-card>
 
@@ -423,8 +438,14 @@ onMounted(() => {
       </div>
     </div>
 
-    <el-dialog v-model="inspirationDialogVisible" :title="editingInspirationId ? '编辑灵感条目' : '新增灵感条目'" width="720px">
-      <el-form label-width="92px">
+    <el-dialog
+      v-model="inspirationDialogVisible"
+      :title="editingInspirationId ? '编辑灵感条目' : '新增灵感条目'"
+      :fullscreen="isMobile"
+      width="720px"
+      class="mobile-form-dialog"
+    >
+      <el-form :label-width="isMobile ? 'auto' : '92px'" :label-position="isMobile ? 'top' : 'right'">
         <div class="form-grid">
           <el-form-item label="标题"><el-input v-model="inspirationForm.title" /></el-form-item>
           <el-form-item label="分类标签"><el-input v-model="inspirationForm.tag" /></el-form-item>
@@ -445,13 +466,21 @@ onMounted(() => {
         </div>
       </el-form>
       <template #footer>
-        <el-button @click="inspirationDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitInspiration">保存</el-button>
+        <div class="dialog-actions">
+          <el-button @click="inspirationDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="submitInspiration">保存</el-button>
+        </div>
       </template>
     </el-dialog>
 
-    <el-dialog v-model="projectDialogVisible" :title="editingProjectId ? '编辑研发产品' : '新增研发产品'" width="760px">
-      <el-form label-width="92px">
+    <el-dialog
+      v-model="projectDialogVisible"
+      :title="editingProjectId ? '编辑研发产品' : '新增研发产品'"
+      :fullscreen="isMobile"
+      width="760px"
+      class="mobile-form-dialog"
+    >
+      <el-form :label-width="isMobile ? 'auto' : '92px'" :label-position="isMobile ? 'top' : 'right'">
         <div class="form-grid">
           <el-form-item label="产品名"><el-input v-model="projectForm.name" /></el-form-item>
           <el-form-item label="品类"><el-input v-model="projectForm.category" /></el-form-item>
@@ -472,13 +501,21 @@ onMounted(() => {
         </div>
       </el-form>
       <template #footer>
-        <el-button @click="projectDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitProject">保存</el-button>
+        <div class="dialog-actions">
+          <el-button @click="projectDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="submitProject">保存</el-button>
+        </div>
       </template>
     </el-dialog>
 
-    <el-dialog v-model="proofDialogVisible" title="新增打样记录" width="720px">
-      <el-form label-width="92px">
+    <el-dialog
+      v-model="proofDialogVisible"
+      title="新增打样记录"
+      :fullscreen="isMobile"
+      width="720px"
+      class="mobile-form-dialog"
+    >
+      <el-form :label-width="isMobile ? 'auto' : '92px'" :label-position="isMobile ? 'top' : 'right'">
         <div class="form-grid">
           <el-form-item label="记录标题"><el-input v-model="proofForm.title" /></el-form-item>
           <el-form-item label="日期"><el-date-picker v-model="proofForm.date" type="date" value-format="YYYY-MM-DD" /></el-form-item>
@@ -490,8 +527,10 @@ onMounted(() => {
         </div>
       </el-form>
       <template #footer>
-        <el-button @click="proofDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitProof">保存记录</el-button>
+        <div class="dialog-actions">
+          <el-button @click="proofDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="submitProof">保存记录</el-button>
+        </div>
       </template>
     </el-dialog>
   </div>
