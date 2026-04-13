@@ -9,6 +9,14 @@ interface InspirationItem {
   element: string;
 }
 
+interface InspirationRecord {
+  id: string;
+  items: InspirationItem[];
+  styles: string[];
+  createdAt: string;
+  completed: boolean;
+}
+
 interface CategoryConfig {
   label: CategoryKey;
   prefixes: string[];
@@ -81,6 +89,7 @@ const categoryPools = categoryConfigs.map((config) => ({
 const selectedCategories = ref<CategoryKey[]>(categoryConfigs.map((item) => item.label));
 const inspirationItems = ref<InspirationItem[]>([]);
 const styleKeywords = ref<string[]>([]);
+const inspirationRecords = ref<InspirationRecord[]>([]);
 
 const stylePool = [
  '水彩',
@@ -124,6 +133,8 @@ const styleText = computed(() =>
   styleKeywords.value.length ? styleKeywords.value.join('/') :'暂未生成风格关键词',
 );
 
+const hasCurrentInspiration = computed(() => inspirationItems.value.length > 0);
+
 function generateInspiration() {
   if (selectedCategories.value.length === 0) {
     ElMessage.warning('请至少选择一个元素类型');
@@ -152,6 +163,32 @@ function generateInspiration() {
 
 function regenerate() {
   generateInspiration();
+}
+
+function applyCurrentInspiration() {
+  if (!hasCurrentInspiration.value) {
+    ElMessage.warning('请先生成一组灵感');
+    return;
+  }
+
+  inspirationRecords.value.unshift({
+    id: `record-${Date.now()}`,
+    items: inspirationItems.value.map((item) => ({ ...item })),
+    styles: [...styleKeywords.value],
+    createdAt: new Date().toISOString(),
+    completed: false,
+  });
+
+  if (inspirationRecords.value.length > 30) {
+    inspirationRecords.value = inspirationRecords.value.slice(0, 30);
+  }
+
+  ElMessage.success('已存档到灵感记录');
+}
+
+function deleteRecord(id: string) {
+  inspirationRecords.value = inspirationRecords.value.filter((record) => record.id !== id);
+  ElMessage.success('记录已删除');
 }
 
 generateInspiration();
@@ -188,6 +225,7 @@ generateInspiration();
       <div class="actions-row">
         <el-button type="primary" @click="generateInspiration">随机生成灵感</el-button>
         <el-button @click="regenerate">再来一组</el-button>
+        <el-button type="success" plain :disabled="!hasCurrentInspiration" @click="applyCurrentInspiration">应用并存档</el-button>
       </div>
     </el-card>
 
@@ -216,6 +254,47 @@ generateInspiration();
 
       <div class="dialog-tip">{{ inspirationText }}</div>
       <div class="dialog-tip">风格：{{ styleText }}</div>
+    </el-card>
+
+    <el-card class="section-card">
+      <template #header>
+        <div class="toolbar">
+          <h3>灵感记录</h3>
+          <span class="inline-tip">点击“应用并存档”后会保存在这里（最多 30 条）</span>
+        </div>
+      </template>
+
+      <div v-if="inspirationRecords.length === 0" class="dialog-tip">还没有存档记录，先生成并应用一组灵感吧。</div>
+
+      <div v-else class="record-list">
+        <div v-for="record in inspirationRecords" :key="record.id" class="record-item" :class="{ 'record-item--done': record.completed }">
+          <div class="record-head">
+            <div class="record-time">{{ new Date(record.createdAt).toLocaleString('zh-CN') }}</div>
+            <div class="record-actions">
+              <el-checkbox v-model="record.completed">已完成</el-checkbox>
+              <el-button link type="danger" @click="deleteRecord(record.id)">删除</el-button>
+            </div>
+          </div>
+
+          <div class="result-pills">
+            <el-tag
+              v-for="(item, idx) in record.items"
+              :key="`${record.id}-${item.category}-${idx}`"
+              size="small"
+              effect="plain"
+              class="result-pill"
+            >
+              {{ item.category }} · {{ item.element }}
+            </el-tag>
+          </div>
+
+          <div class="result-pills">
+            <el-tag v-for="keyword in record.styles" :key="`${record.id}-${keyword}`" size="small" type="success" effect="light" class="result-pill">
+              {{ keyword }}
+            </el-tag>
+          </div>
+        </div>
+      </div>
     </el-card>
   </div>
 </template>
@@ -248,5 +327,94 @@ generateInspiration();
   margin-top: 14px;
   display: grid;
   gap: 8px;
+}
+
+.record-list {
+  display: grid;
+  gap: 12px;
+}
+
+.record-item {
+  border: 1px solid rgba(120, 120, 120, 0.2);
+  border-radius: 12px;
+  padding: 10px;
+  display: grid;
+  gap: 10px;
+}
+
+.record-item--done {
+  opacity: 0.72;
+}
+
+.record-item--done .result-pill {
+  text-decoration: line-through;
+}
+
+.record-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.record-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.record-time {
+  font-size: 12px;
+  color: #7d7d86;
+}
+
+@media (max-width: 768px) {
+  .type-list {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .actions-row {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .actions-row :deep(.el-button) {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .result-pills {
+    gap: 8px;
+  }
+
+  .result-pill {
+    max-width: 100%;
+  }
+
+  .result-pill :deep(.el-tag__content) {
+    white-space: normal;
+    line-height: 1.35;
+    word-break: break-word;
+  }
+
+  .dialog-tip {
+    line-height: 1.6;
+    word-break: break-word;
+  }
+
+  .record-item {
+    padding: 10px 8px;
+  }
+
+  .record-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .record-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
 }
 </style>
