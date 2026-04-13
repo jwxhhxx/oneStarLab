@@ -27,6 +27,12 @@ const router = createRouter({
       component: () => import('@/views/PricingView.vue'),
       meta: { title: '自动定价' },
     },
+    {
+      path: '/lab',
+      name: 'lab',
+      component: () => import('@/views/LabView.vue'),
+      meta: { title: '研究所' },
+    },
   ],
 });
 

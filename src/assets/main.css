@@ -419,6 +419,55 @@ body {
   font-weight: 700;
 }
 
+.lab-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.lab-card {
+  padding: 14px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #f8faff, #ffffff);
+  border: 1px solid rgba(132, 145, 173, 0.12);
+}
+
+.lab-card__top,
+.lab-card__footer,
+.lab-progress-item__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.lab-card__summary {
+  margin: 10px 0;
+  color: #66758d;
+  line-height: 1.6;
+}
+
+.lab-points {
+  margin: 0;
+  padding-left: 18px;
+  color: #738099;
+}
+
+.lab-points li + li {
+  margin-top: 4px;
+}
+
+.lab-progress-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.lab-progress-item {
+  padding: 14px;
+  border-radius: 16px;
+  background: #f8faff;
+}
+
 .empty-note {
   color: #8a94a8;
   font-size: 13px;
