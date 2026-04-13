@@ -2,7 +2,7 @@ import dayjs from 'dayjs';
 import { computed, ref } from 'vue';
 import { acceptHMRUpdate, defineStore } from 'pinia';
 
-import { db, defaultPricingRule, seedDemoData, seedLabData } from '@/db/appDb';
+import { db, defaultPricingRule } from '@/db/appDb';
 import type {
   InspirationInput,
   LabInspiration,
@@ -49,19 +49,10 @@ export const useShopStore = defineStore('shop', () => {
 
     loading.value = true;
     try {
-      const productCount = await db.products.count();
       const rule = await db.pricingRules.get(1);
-      const inspirationCount = await db.labInspirations.count();
 
-      if (productCount === 0) {
-        await seedDemoData();
-      } else {
-        if (!rule) {
-          await db.pricingRules.put({ ...defaultPricingRule });
-        }
-        if (inspirationCount === 0) {
-          await seedLabData();
-        }
+      if (!rule) {
+        await db.pricingRules.put({ ...defaultPricingRule });
       }
 
       await loadAll();
