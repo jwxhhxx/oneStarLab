@@ -18,9 +18,11 @@ async function handleExport() {
     const blob = await exportDB(db);
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    const date = new Date().toISOString().slice(0, 10);
+    const now = new Date();
+    const datePart = now.toISOString().slice(0, 10);
+    const timePart = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
     a.href = url;
-    a.download = `onestarlab-backup-${date}.json`;
+    a.download = `onestarlab-backup-${datePart}-${timePart}.json`;
     a.click();
     URL.revokeObjectURL(url);
     ElMessage.success('数据已导出');
