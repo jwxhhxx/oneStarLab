@@ -39,6 +39,12 @@ const router = createRouter({
       component: () => import('@/views/InspirationView.vue'),
       meta: { title: '灵感生成' },
     },
+    {
+      path: '/data',
+      name: 'data',
+      component: () => import('@/views/DataView.vue'),
+      meta: { title: '数据中心' },
+    },
   ],
 });
 

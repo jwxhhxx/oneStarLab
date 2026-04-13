@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Calendar, DataAnalysis, EditPen, Goods, MagicStick, Money, Tickets } from '@element-plus/icons-vue';
+import { Calendar, DataAnalysis, EditPen, Files, Goods, MagicStick, Money, Tickets } from '@element-plus/icons-vue';
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
 
@@ -12,6 +12,7 @@ const menus = [
   { path: '/pricing', label: '自动定价', icon: Money },
   { path: '/lab', label: '研究所', icon: EditPen },
   { path: '/inspiration', label: '灵感生成', icon: MagicStick },
+  { path: '/data', label: '数据中心', icon: Files },
 ];
 
 const pageTitle = computed(() => String(route.meta.title ?? '店铺经营后台'));
