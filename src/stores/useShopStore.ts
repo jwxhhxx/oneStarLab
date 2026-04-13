@@ -158,6 +158,11 @@ export const useShopStore = defineStore('shop', () => {
     await loadAll();
   }
 
+  async function deleteInspiration(id: number) {
+    await db.labInspirations.delete(id);
+    await loadAll();
+  }
+
   async function addLabProject(input: LabProjectInput) {
     await db.labProjects.add({
       ...input,
@@ -207,6 +212,47 @@ export const useShopStore = defineStore('shop', () => {
       ],
       updatedAt: new Date().toISOString(),
     });
+    await loadAll();
+  }
+
+  async function deleteLabProject(id: number) {
+    await db.labProjects.delete(id);
+    await loadAll();
+  }
+
+  async function convertLabProjectToProduct(id: number) {
+    const project = await db.labProjects.get(id);
+    if (!project) {
+      throw new Error('未找到研发产品');
+    }
+
+    const existing = await db.products.where('sku').equals(`LAB-${id}`).first();
+    if (existing) {
+      throw new Error('该研发产品已转为正式商品');
+    }
+
+    await db.transaction('rw', db.products, db.labProjects, async () => {
+      await db.products.add({
+        name: project.name,
+        sku: `LAB-${id}`,
+        category: project.category,
+        supplier: '待确认供应商',
+        purchaseCost: 0,
+        packagingCost: 0,
+        salePrice: 0,
+        stock: 0,
+        safeStock: 5,
+        note: `由研究所转入：${project.note}`,
+        createdAt: new Date().toISOString(),
+      });
+
+      await db.labProjects.update(id, {
+        stage: '已上新',
+        progress: 100,
+        updatedAt: new Date().toISOString(),
+      });
+    });
+
     await loadAll();
   }
 
@@ -289,10 +335,13 @@ export const useShopStore = defineStore('shop', () => {
     savePricingRule,
     addInspiration,
     updateInspiration,
+    deleteInspiration,
     addLabProject,
     updateLabProject,
     updateLabProjectStage,
     addProofRecord,
+    deleteLabProject,
+    convertLabProjectToProduct,
     getSuggestedPrice,
     getMinPrice,
   };

@@ -176,6 +176,33 @@ async function handleStageChange(projectId: number, stage: string) {
   }
 }
 
+async function handleDeleteInspiration(id: number) {
+  try {
+    await store.deleteInspiration(id);
+    ElMessage.success('灵感条目已删除');
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '删除灵感条目失败');
+  }
+}
+
+async function handleDeleteProject(id: number) {
+  try {
+    await store.deleteLabProject(id);
+    ElMessage.success('研发产品已删除');
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '删除研发产品失败');
+  }
+}
+
+async function handleConvertProject(id: number) {
+  try {
+    await store.convertLabProjectToProduct(id);
+    ElMessage.success('已转入正式商品中心');
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '转正式商品失败');
+  }
+}
+
 function getProjectsForDate(day: string) {
   return store.labProjects.filter((item) => item.launchDate === day);
 }
@@ -266,7 +293,10 @@ onMounted(() => {
 
             <div class="lab-card__footer">
               <span class="inline-tip">更新于 {{ dayjs(item.updatedAt).format('MM-DD') }}</span>
-              <el-button link type="primary" @click="openInspirationDialog(item)">编辑</el-button>
+              <div class="lab-card__actions">
+                <el-button link type="primary" @click="openInspirationDialog(item)">编辑</el-button>
+                <el-button link type="danger" @click="handleDeleteInspiration(item.id!)">删除</el-button>
+              </div>
             </div>
           </article>
         </div>
@@ -307,6 +337,8 @@ onMounted(() => {
             <div class="lab-card__actions">
               <el-button link type="primary" @click="openProjectDialog(item)">编辑</el-button>
               <el-button link @click="openProofDialog(item.id!)">添加打样记录</el-button>
+              <el-button link type="success" @click="handleConvertProject(item.id!)">转正式商品</el-button>
+              <el-button link type="danger" @click="handleDeleteProject(item.id!)">删除</el-button>
             </div>
 
             <div class="lab-record-list">
@@ -371,6 +403,7 @@ onMounted(() => {
               </template>
             </el-table-column>
           </el-table>
+          <div class="dialog-tip">生产完成后可直接点“转正式商品”，系统会自动同步到商品中心。</div>
         </el-card>
 
         <el-card class="section-card">
