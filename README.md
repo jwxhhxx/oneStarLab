@@ -2,6 +2,8 @@
 
 OneStarLab 是一个纯前端实现的手帐店铺经营后台（SPA），数据保存在浏览器 IndexedDB。
 
+在线访问地址。<https://jwxhhxx.github.io/oneStarLab/>
+
 ## 功能概览
 
 当前版本支持：
@@ -35,6 +37,7 @@ npm run dev
 默认访问地址：
 
 - <http://localhost:5173>
+- GitHub Pages：<https://jwxhhxx.github.io/oneStarLab/>
 
 ## 构建与预览
 
