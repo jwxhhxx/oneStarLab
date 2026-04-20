@@ -15,6 +15,7 @@
   - Database schema/indexes are defined in `src/db/appDb.ts`.
   - Route map and page-level lazy loading live in `src/router/index.ts`.
 - Data flow should remain: View -> Pinia store actions -> Dexie tables.
+- Expense records are managed as a separate Dexie table and page flow; keep them independent from order profit calculations unless a task explicitly asks to combine them.
 
 ## Build and Test
 - Install deps: `npm install`

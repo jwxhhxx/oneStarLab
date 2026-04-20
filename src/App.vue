@@ -38,6 +38,7 @@ const menus = [
   { path: '/products', label: '商品中心', icon: Goods },
   { path: '/orders', label: '订单中心', icon: Tickets },
   { path: '/pricing', label: '自动定价', icon: Money },
+  { path: '/expenses', label: '支出记录', icon: Money },
   { path: '/lab', label: '研究所', icon: EditPen },
   { path: '/inspiration', label: '灵感生成', icon: MagicStick },
   { path: '/data', label: '数据中心', icon: Files },

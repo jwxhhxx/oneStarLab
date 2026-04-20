@@ -146,3 +146,15 @@ export interface DrawingInspirationRecord {
   createdAt: string;
   completed: boolean;
 }
+
+export interface ExpenseRecord {
+  id?: number;
+  purpose: string;
+  amount: number;
+  createdAt: string;
+}
+
+export interface ExpenseInput {
+  purpose: string;
+  amount: number;
+}

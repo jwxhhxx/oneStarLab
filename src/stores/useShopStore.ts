@@ -5,6 +5,8 @@ import { acceptHMRUpdate, defineStore } from 'pinia';
 import { db, defaultPricingRule } from '@/db/appDb';
 import type {
   DrawingInspirationRecord,
+  ExpenseInput,
+  ExpenseRecord,
   InspirationInput,
   LabInspiration,
   LabProject,
@@ -37,6 +39,7 @@ export const useShopStore = defineStore('shop', () => {
   const labInspirations = ref<LabInspiration[]>([]);
   const labProjects = ref<LabProject[]>([]);
   const drawingInspirations = ref<DrawingInspirationRecord[]>([]);
+  const expenses = ref<ExpenseRecord[]>([]);
 
   async function loadAll() {
     products.value = await db.products.orderBy('createdAt').reverse().toArray();
@@ -45,6 +48,7 @@ export const useShopStore = defineStore('shop', () => {
     labInspirations.value = await db.labInspirations.orderBy('updatedAt').reverse().toArray();
     labProjects.value = await db.labProjects.orderBy('updatedAt').reverse().toArray();
     drawingInspirations.value = await db.drawingInspirations.orderBy('createdAt').reverse().toArray();
+    expenses.value = await db.expenses.orderBy('createdAt').reverse().toArray();
   }
 
   async function initialize() {
@@ -420,6 +424,28 @@ export const useShopStore = defineStore('shop', () => {
     await loadAll();
   }
 
+  async function addExpense(input: ExpenseInput) {
+    await db.expenses.add({
+      ...input,
+      amount: Number(input.amount),
+      createdAt: new Date().toISOString(),
+    });
+    await loadAll();
+  }
+
+  async function updateExpense(id: number, input: ExpenseInput) {
+    await db.expenses.update(id, {
+      ...input,
+      amount: Number(input.amount),
+    });
+    await loadAll();
+  }
+
+  async function deleteExpense(id: number) {
+    await db.expenses.delete(id);
+    await loadAll();
+  }
+
   return {
     loading,
     initialized,
@@ -429,6 +455,7 @@ export const useShopStore = defineStore('shop', () => {
     labInspirations,
     labProjects,
     drawingInspirations,
+    expenses,
     stats,
     lowStockProducts,
     recentOrders,
@@ -455,6 +482,9 @@ export const useShopStore = defineStore('shop', () => {
     addDrawingInspiration,
     updateDrawingInspiration,
     deleteDrawingInspiration,
+    addExpense,
+    updateExpense,
+    deleteExpense,
     getSuggestedPrice,
     getMinPrice,
   };

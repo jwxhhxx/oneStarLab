@@ -45,6 +45,12 @@ const router = createRouter({
       component: () => import('@/views/DataView.vue'),
       meta: { title: '数据中心' },
     },
+    {
+      path: '/expenses',
+      name: 'expenses',
+      component: () => import('@/views/ExpensesView.vue'),
+      meta: { title: '支出记录' },
+    },
   ],
 });
 
