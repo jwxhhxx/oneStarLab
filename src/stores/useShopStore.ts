@@ -455,9 +455,25 @@ export const useShopStore = defineStore('shop', () => {
     const product = await db.products.get(productId);
     if (!product || !product.id) throw new Error('未找到商品');
 
-    await db.transaction('rw', db.products, db.inventoryTransactions, async () => {
+    await db.transaction('rw', db.products, db.orders, db.inventoryTransactions, async () => {
       const newStock = type === 'in' ? product.stock + quantity : product.stock - quantity;
       if (type === 'out' && newStock < 0) throw new Error('库存不足');
+
+      // 如果是出库，先创建订单记录（与库存变动放在同一事务中，保持原子性）
+      if (type === 'out') {
+        const orderInput = {
+          productId,
+          customerName: note ? `扫码:${note}` : '扫码出库',
+          channel: '扫码',
+          quantity,
+          discountAmount: 0,
+          shippingCost: 0,
+          platformFeeRate: 0,
+        } as NewOrderInput;
+
+        const orderPayload = buildOrderPayload(product, orderInput);
+        await db.orders.add(orderPayload);
+      }
 
       await db.products.update(product.id!, { stock: newStock });
 
