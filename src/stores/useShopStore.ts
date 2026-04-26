@@ -7,6 +7,8 @@ import type {
   DrawingInspirationRecord,
   ExpenseInput,
   ExpenseRecord,
+  InventoryTransaction,
+  InventoryTransactionInput,
   InspirationInput,
   LabInspiration,
   LabProject,
@@ -40,6 +42,7 @@ export const useShopStore = defineStore('shop', () => {
   const labProjects = ref<LabProject[]>([]);
   const drawingInspirations = ref<DrawingInspirationRecord[]>([]);
   const expenses = ref<ExpenseRecord[]>([]);
+  const inventoryTransactions = ref<InventoryTransaction[]>([]);
 
   async function loadAll() {
     products.value = await db.products.orderBy('createdAt').reverse().toArray();
@@ -49,6 +52,7 @@ export const useShopStore = defineStore('shop', () => {
     labProjects.value = await db.labProjects.orderBy('updatedAt').reverse().toArray();
     drawingInspirations.value = await db.drawingInspirations.orderBy('createdAt').reverse().toArray();
     expenses.value = await db.expenses.orderBy('createdAt').reverse().toArray();
+    inventoryTransactions.value = await db.inventoryTransactions.orderBy('createdAt').reverse().toArray();
   }
 
   async function initialize() {
@@ -433,6 +437,52 @@ export const useShopStore = defineStore('shop', () => {
     await loadAll();
   }
 
+  async function addInventoryTransaction(input: InventoryTransactionInput) {
+    await db.inventoryTransactions.add({
+      ...input,
+      createdAt: new Date().toISOString(),
+    });
+    await loadAll();
+  }
+
+  async function processInventoryTransaction(
+    productId: number,
+    type: 'in' | 'out',
+    quantity: number,
+    barcode?: string,
+    note?: string,
+  ) {
+    const product = await db.products.get(productId);
+    if (!product || !product.id) throw new Error('未找到商品');
+
+    await db.transaction('rw', db.products, db.inventoryTransactions, async () => {
+      const newStock = type === 'in' ? product.stock + quantity : product.stock - quantity;
+      if (type === 'out' && newStock < 0) throw new Error('库存不足');
+
+      await db.products.update(product.id!, { stock: newStock });
+
+      await db.inventoryTransactions.add({
+        productId,
+        barcode: barcode ?? product.sku,
+        type,
+        quantity,
+        note: note ?? '',
+        createdAt: new Date().toISOString(),
+      });
+    });
+
+    await loadAll();
+  }
+
+  async function findProductByBarcode(barcode: string) {
+    return await db.products.where('sku').equals(barcode).first();
+  }
+
+  async function deleteInventoryTransaction(id: number) {
+    await db.inventoryTransactions.delete(id);
+    await loadAll();
+  }
+
   async function updateExpense(id: number, input: ExpenseInput) {
     await db.expenses.update(id, {
       ...input,
@@ -456,6 +506,7 @@ export const useShopStore = defineStore('shop', () => {
     labProjects,
     drawingInspirations,
     expenses,
+    inventoryTransactions,
     stats,
     lowStockProducts,
     recentOrders,
@@ -483,6 +534,10 @@ export const useShopStore = defineStore('shop', () => {
     updateDrawingInspiration,
     deleteDrawingInspiration,
     addExpense,
+    addInventoryTransaction,
+    processInventoryTransaction,
+    findProductByBarcode,
+    deleteInventoryTransaction,
     updateExpense,
     deleteExpense,
     getSuggestedPrice,

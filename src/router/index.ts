@@ -40,6 +40,18 @@ const router = createRouter({
       meta: { title: '灵感生成' },
     },
     {
+      path: '/barcode',
+      name: 'barcode',
+      component: () => import('@/views/BarcodeView.vue'),
+      meta: { title: '生成条形码' },
+    },
+    {
+      path: '/scan',
+      name: 'scan',
+      component: () => import('@/views/BarcodeScanView.vue'),
+      meta: { title: '扫码出入库' },
+    },
+    {
       path: '/data',
       name: 'data',
       component: () => import('@/views/DataView.vue'),

@@ -158,3 +158,21 @@ export interface ExpenseInput {
   purpose: string;
   amount: number;
 }
+
+export interface InventoryTransaction {
+  id?: number;
+  productId: number;
+  barcode?: string;
+  type: 'in' | 'out';
+  quantity: number;
+  note?: string;
+  createdAt: string;
+}
+
+export interface InventoryTransactionInput {
+  productId: number;
+  barcode?: string;
+  type: 'in' | 'out';
+  quantity: number;
+  note?: string;
+}
