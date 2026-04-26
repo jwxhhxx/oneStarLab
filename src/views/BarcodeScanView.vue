@@ -18,6 +18,9 @@ const actionType = ref<'in' | 'out'>('in');
 const scannerError = ref<string | null>(null);
 const manualBarcode = ref('');
 
+const scannedItems = ref<Array<{ productId?: number; barcode: string; name?: string; sku?: string; quantity: number }>>([]);
+const lastScanAt: Record<string, number> = {};
+
 async function startScanner() {
   scannerError.value = null;
   try {
@@ -28,15 +31,15 @@ async function startScanner() {
 
     codeReader.decodeFromConstraints(constraints, videoRef.value!, (result, err) => {
       if (err && !(err instanceof Error && (err as any).name === 'NotFoundError')) {
-        // 非找不到设备的错误时记录日志
         console.warn('decode error', err);
       }
 
       if (result) {
-        scanResult.value = result.getText();
-        (async () => {
-          const p = await store.findProductByBarcode(scanResult.value!);
-          scannedProduct.value = p ?? null;
+        const code = result.getText();
+        scanResult.value = code;
+        // 异步处理扫描结果，加入扫描队列
+        void (async () => {
+          await handleScan(code);
         })();
       }
     });
@@ -86,6 +89,55 @@ async function confirmProcess() {
     scannedProduct.value = null;
   } catch (e: any) {
     window.alert('操作失败：' + (e.message ?? e));
+  }
+}
+
+async function handleScan(code: string) {
+  const now = Date.now();
+  if (lastScanAt[code] && now - lastScanAt[code] < 1000) return; // 去抖
+  lastScanAt[code] = now;
+
+  // 如果已在队列中，增加数量
+  const exist = scannedItems.value.find((it) => it.barcode === code);
+  if (exist) {
+    exist.quantity += 1;
+    return;
+  }
+
+  const p = await store.findProductByBarcode(code);
+  if (!p || !p.id) {
+    // 未识别的条码，提示并跳过
+    console.warn('未识别条码：', code);
+    window.alert(`未识别条码 ${code}，请先在商品中心添加该 SKU`);
+    return;
+  }
+
+  scannedItems.value.push({ productId: p.id, barcode: code, name: p.name, sku: p.sku, quantity: 1 });
+}
+
+function removeScanned(index: number) {
+  scannedItems.value.splice(index, 1);
+}
+
+function changeQuantity(index: number, delta: number) {
+  const it = scannedItems.value[index];
+  if (!it) return;
+  it.quantity = Math.max(1, it.quantity + delta);
+}
+
+async function generateOrderFromScans() {
+  if (!scannedItems.value.length) {
+    window.alert('没有扫码项目');
+    return;
+  }
+
+  try {
+    const items = scannedItems.value.map((it) => ({ productId: it.productId!, quantity: it.quantity, barcode: it.barcode }));
+    const orderNo = await store.createOrderFromScans(items, actionType.value, '扫码批量');
+    window.alert(`订单已生成：${orderNo}`);
+    scannedItems.value = [];
+  } catch (e: any) {
+    window.alert('生成订单失败：' + (e.message ?? e));
   }
 }
 
@@ -145,6 +197,39 @@ onUnmounted(() => {
 
       <div v-if="scannedProduct" style="margin-top:12px">
         <strong>商品：</strong> {{ scannedProduct.name }} ({{ scannedProduct.sku }}) 当前库存：{{ scannedProduct.stock }}
+      </div>
+
+      <div style="margin-top:12px">
+        <div style="margin-bottom:8px">已扫码队列：</div>
+        <div v-if="scannedItems.length">
+          <el-table :data="scannedItems" style="width:100%" size="small">
+            <el-table-column prop="sku" label="SKU" width="160">
+              <template #default="{ row }">{{ row.sku }}</template>
+            </el-table-column>
+            <el-table-column prop="name" label="名称">
+              <template #default="{ row }">{{ row.name }}</template>
+            </el-table-column>
+            <el-table-column label="数量" width="160">
+              <template #default="{ row, $index }">
+                <el-button size="mini" @click="changeQuantity($index, -1)">-</el-button>
+                <span style="margin:0 8px">{{ row.quantity }}</span>
+                <el-button size="mini" @click="changeQuantity($index, 1)">+</el-button>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="120">
+              <template #default="{ $index }">
+                <el-button size="mini" type="danger" @click="removeScanned($index)">删除</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+
+          <div style="margin-top:12px;display:flex;gap:8px;align-items:center;">
+            <el-button type="primary" @click="generateOrderFromScans">生成订单</el-button>
+            <el-button @click="scannedItems = []">清空队列</el-button>
+            <div style="margin-left:auto;color:#666">SKU 数：{{ scannedItems.length }} &nbsp; 总数：{{ scannedItems.reduce((s, it) => s + it.quantity, 0) }}</div>
+          </div>
+        </div>
+        <div v-else style="color:#999">队列为空：开始扫码会自动将商品加入队列。</div>
       </div>
 
       <el-divider />

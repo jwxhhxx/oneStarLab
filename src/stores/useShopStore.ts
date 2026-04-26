@@ -490,6 +490,112 @@ export const useShopStore = defineStore('shop', () => {
     await loadAll();
   }
 
+  async function createOrderFromScans(
+    items: Array<{ productId: number; quantity: number; barcode?: string; note?: string }> ,
+    type: 'in' | 'out',
+    batchNote?: string,
+  ) {
+    if (!items || items.length === 0) throw new Error('没有扫描到任何商品');
+
+    // 聚合同一商品
+    const agg = new Map<number, { quantity: number; barcode?: string }>();
+    for (const it of items) {
+      const cur = agg.get(it.productId);
+      if (cur) cur.quantity += it.quantity;
+      else agg.set(it.productId, { quantity: it.quantity, barcode: it.barcode });
+    }
+
+    const productIds = Array.from(agg.keys());
+
+    let newOrderNo = '';
+
+    await db.transaction('rw', db.products, db.orders, db.inventoryTransactions, async () => {
+      const productsList = await db.products.bulkGet(productIds);
+
+      // validate
+      for (const pid of productIds) {
+        const p = productsList.find((x) => x && x.id === pid);
+        if (!p) throw new Error(`未找到商品 id=${pid}`);
+      }
+
+      // check stock for out
+      if (type === 'out') {
+        for (const pid of productIds) {
+          const p = productsList.find((x) => x && x.id === pid)!;
+          const need = agg.get(pid)!.quantity;
+          if (p.stock < need) throw new Error(`商品 ${p.name} 库存不足`);
+        }
+      }
+
+      // build order items and totals
+      const orderItems = [] as Array<import('@/types').OrderItem>;
+      let totalAmount = 0;
+      let goodsCost = 0;
+
+      for (const pid of productIds) {
+        const p = productsList.find((x) => x && x.id === pid)! as Product;
+        const qty = agg.get(pid)!.quantity;
+        const itemTotal = Number((p.salePrice * qty).toFixed(2));
+        const itemCost = Number(((p.purchaseCost + p.packagingCost) * qty).toFixed(2));
+        orderItems.push({
+          productId: p.id!,
+          productName: p.name,
+          sku: p.sku,
+          quantity: qty,
+          salePrice: p.salePrice,
+          totalAmount: itemTotal,
+          totalCost: itemCost,
+        });
+        totalAmount += itemTotal;
+        goodsCost += itemCost;
+      }
+
+      const platformFee = 0;
+      const shippingCost = 0;
+      const discountAmount = 0;
+      const netProfit = Number((totalAmount - shippingCost - platformFee - goodsCost).toFixed(2));
+
+      const orderPayload = {
+        orderNo: `ORD-${dayjs().format('YYYYMMDD-HHmmss')}`,
+        channel: '扫码',
+        customerName: batchNote ? `扫码:${batchNote}` : '扫码出库批量',
+        items: orderItems,
+        totalAmount: Number(totalAmount.toFixed(2)),
+        discountAmount,
+        shippingCost,
+        platformFee,
+        goodsCost: Number(goodsCost.toFixed(2)),
+        netProfit,
+        createdAt: new Date().toISOString(),
+        status: 'paid' as const,
+      } as Omit<Order, 'id'>;
+
+      const id = await db.orders.add(orderPayload as any);
+      newOrderNo = orderPayload.orderNo;
+
+      // update stocks and add inventory transactions
+      for (const pid of productIds) {
+        const p = productsList.find((x) => x && x.id === pid)! as Product;
+        const qty = agg.get(pid)!.quantity;
+        const newStock = type === 'in' ? p.stock + qty : p.stock - qty;
+        await db.products.update(p.id!, { stock: newStock });
+
+        await db.inventoryTransactions.add({
+          productId: p.id!,
+          barcode: agg.get(pid)!.barcode ?? p.sku,
+          type,
+          quantity: qty,
+          note: batchNote ?? '',
+          createdAt: new Date().toISOString(),
+        });
+      }
+    });
+
+    await loadAll();
+
+    return newOrderNo;
+  }
+
   async function findProductByBarcode(barcode: string) {
     return await db.products.where('sku').equals(barcode).first();
   }
@@ -552,6 +658,7 @@ export const useShopStore = defineStore('shop', () => {
     addExpense,
     addInventoryTransaction,
     processInventoryTransaction,
+    createOrderFromScans,
     findProductByBarcode,
     deleteInventoryTransaction,
     updateExpense,
