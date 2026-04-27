@@ -48,6 +48,16 @@ const tableRows = computed(() =>
 
 const categoryCounts = computed(() => store.getCategoryUsageCounts());
 
+const displayCategories = computed(() => {
+  const cats = [...store.categories];
+  const idx = cats.findIndex((c: any) => c.name === '未分类');
+  if (idx > 0) {
+    const [uncat] = cats.splice(idx, 1);
+    cats.unshift(uncat);
+  }
+  return cats;
+});
+
 const summaryCards = computed(() => {
   const stockValue = store.products.reduce(
     (sum, item) => sum + (item.purchaseCost + item.packagingCost) * item.stock,
@@ -626,7 +636,16 @@ onUnmounted(() => {
         <div class="categories-section">
           <div v-if="!store.categories.length" class="empty-cat" style="color:#888;margin-top:8px">未定义分类，新增商品时可直接输入分类并保存。</div>
           <div v-else class="categories-grid">
-            <el-tag v-for="c in store.categories" :key="c.id" closable @close="handleDeleteCategory(c.id)" class="category-tag">
+            <el-tag
+              v-for="c in displayCategories"
+              :key="c.id"
+              closable
+              @close="handleDeleteCategory(c.id)"
+              class="category-tag"
+              :type="c.name === '未分类' ? 'warning' : undefined"
+              effect="plain"
+              round
+            >
               <span class="cat-label">{{ c.name }}</span>
               <span class="cat-count">· {{ categoryCounts[c.name] || 0 }}</span>
             </el-tag>
