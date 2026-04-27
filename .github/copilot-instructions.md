@@ -30,6 +30,7 @@
 - When changing IndexedDB schema, increment Dexie `version()` in `src/db/appDb.ts` and define indexes carefully.
 - Router pages use lazy import and route `meta.title`; keep title behavior consistent with `router.afterEach`.
 - For third-party instances (for example ECharts), ensure mount/unmount lifecycle cleanup to avoid leaks.
+- After each modification, please commit the local code, but do not push it directly to the remote repository.
 
 ## References
 - Project overview and quickstart: `README.md`
