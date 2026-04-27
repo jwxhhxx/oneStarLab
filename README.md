@@ -83,3 +83,4 @@ src/
 
 - 架构与边界说明：[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - 开发与维护指南：[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
+ - 业务说明与操作流程：[docs/BUSINESS.md](docs/BUSINESS.md)
