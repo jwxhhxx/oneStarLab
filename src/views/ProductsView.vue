@@ -438,15 +438,50 @@ async function downloadBarcodePNG() {
         }
       }
 
-      // Fallback: create dataURL and trigger download via anchor
-      const dataUrl = out.toDataURL('image/png');
-      const a = document.createElement('a');
-      a.href = dataUrl;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      barcodePreviewDataUrl.value = dataUrl;
+      // Fallback: try Blob object URL download first, and for iOS open image in new tab for long-press save
+      const objectUrl = URL.createObjectURL(blob);
+      const isIos = /iP(hone|od|ad)/.test(navigator.userAgent || '');
+      try {
+        if (isIos) {
+          // iOS Safari generally ignores `download` attribute — open image so user can long-press to save
+          window.open(objectUrl, '_blank');
+        } else {
+          const a = document.createElement('a');
+          a.href = objectUrl;
+          a.download = fileName;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+        }
+
+        // update preview from blob
+        const dataUrl = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result));
+          reader.onerror = () => resolve('');
+          reader.readAsDataURL(blob);
+        });
+        if (dataUrl) barcodePreviewDataUrl.value = dataUrl;
+
+        // cleanup
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 3000);
+      } catch (err) {
+        console.warn('object URL 下载/打开失败，回退到 dataURL：', err);
+        // final fallback: data URL anchor (older browsers)
+        try {
+          const dataUrl = out.toDataURL('image/png');
+          const a2 = document.createElement('a');
+          a2.href = dataUrl;
+          a2.download = fileName;
+          document.body.appendChild(a2);
+          a2.click();
+          a2.remove();
+          barcodePreviewDataUrl.value = dataUrl;
+        } catch (e2) {
+          console.error('最终回退也失败', e2);
+          window.alert('生成图片失败');
+        }
+      }
     } catch (e) {
       console.error('生成或分享/下载失败', e);
       window.alert('生成图片失败');
