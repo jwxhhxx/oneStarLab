@@ -37,6 +37,7 @@ const rules = {
 const newCategoryName = ref('');
 const skuPreview = ref('');
 let skuPreviewTimer: any = null;
+const MAX_CATEGORY_CHARS = 10;
 
 const tableRows = computed(() =>
   store.products.map((item) => ({
@@ -78,8 +79,12 @@ function resetForm() {
 }
 
 async function addCategoryUI() {
-  const nm = (newCategoryName.value || '').trim();
+  let nm = (newCategoryName.value || '').trim();
   if (!nm) return;
+  if (nm.length > MAX_CATEGORY_CHARS) {
+    ElMessage.warning(`分类名过长，已截断为前 ${MAX_CATEGORY_CHARS} 个字符`);
+    nm = nm.slice(0, MAX_CATEGORY_CHARS);
+  }
   await store.addCategory(nm);
   newCategoryName.value = '';
 }
@@ -268,6 +273,18 @@ async function openBarcodeModal(product: Product) {
   barcodeModalVisible.value = true;
   await nextTick();
   generateBarcode();
+}
+
+async function handleCreateCategoryFromSelect(val: string) {
+  let nm = (val || '').trim();
+  if (!nm) return;
+  if (nm.length > MAX_CATEGORY_CHARS) {
+    ElMessage.warning(`分类名过长，已截断为前 ${MAX_CATEGORY_CHARS} 个字符`);
+    nm = nm.slice(0, MAX_CATEGORY_CHARS);
+  }
+  await store.addCategory(nm);
+  // set the selected value to the (possibly truncated) name
+  form.category = nm;
 }
 
 async function generateBarcode(silent = false) {
@@ -574,6 +591,14 @@ async function submitProduct() {
       if (!ok) return;
     }
 
+    // category length validation (prevent saving overly长分类名)
+    const catCheck = (form.category || '').trim();
+    if (catCheck && catCheck.length > MAX_CATEGORY_CHARS) {
+      ElMessage.error(`分类名过长，最多 ${MAX_CATEGORY_CHARS} 个字符`);
+      focusFormField('category');
+      return;
+    }
+
     // SKU validation
     if (editingProductId.value) {
       // editing: SKU must be present and match format
@@ -668,7 +693,7 @@ onUnmounted(() => {
             <div class="inline-tip">新增的分类会自动出现在新增/编辑商品的下拉中。</div>
           </div>
           <div class="controls-right">
-            <el-input v-model="newCategoryName" placeholder="新增分类" class="add-input" @keyup.enter.native="addCategoryUI" />
+            <el-input v-model="newCategoryName" placeholder="新增分类" class="add-input" @keyup.enter.native="addCategoryUI" :maxlength="MAX_CATEGORY_CHARS" show-word-limit />
             <el-button type="primary" class="add-button" @click="addCategoryUI">添加分类</el-button>
           </div>
         </div>
@@ -776,7 +801,7 @@ onUnmounted(() => {
             </div>
           </el-form-item>
           <el-form-item prop="category" data-prop="category" label="分类">
-            <el-select v-model="form.category" filterable allow-create placeholder="选择或输入分类">
+                    <el-select v-model="form.category" filterable allow-create placeholder="选择或输入分类" @create="handleCreateCategoryFromSelect">
               <el-option v-for="c in store.categories" :key="c.id" :label="c.name" :value="c.name" />
             </el-select>
           </el-form-item>

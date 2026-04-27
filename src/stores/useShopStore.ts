@@ -44,6 +44,7 @@ export const useShopStore = defineStore('shop', () => {
   const drawingInspirations = ref<DrawingInspirationRecord[]>([]);
   const expenses = ref<ExpenseRecord[]>([]);
   const inventoryTransactions = ref<InventoryTransaction[]>([]);
+  const MAX_CATEGORY_NAME_LENGTH = 10;
 
   async function loadAll() {
     products.value = await db.products.orderBy('createdAt').reverse().toArray();
@@ -166,8 +167,12 @@ export const useShopStore = defineStore('shop', () => {
   }
 
   async function addCategory(name: string) {
-    const nm = (name || '').trim();
+    let nm = (name || '').trim();
     if (!nm) return;
+    if (nm.length > MAX_CATEGORY_NAME_LENGTH) {
+      // Truncate long category names at store level as a safety net
+      nm = nm.slice(0, MAX_CATEGORY_NAME_LENGTH);
+    }
     const exists = await db.categories.where('name').equals(nm).first();
     if (!exists) {
       await db.categories.add({ name: nm, createdAt: new Date().toISOString() });
