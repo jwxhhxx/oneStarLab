@@ -397,10 +397,12 @@ async function downloadBarcodePNG() {
 
         const dataUrl = final.toDataURL('image/png');
 
+        const skuForName = selected?.sku ?? barcodeModalValue.value ?? '';
         const base = selected ? selected.name : (barcodeModalValue.value || 'label');
-        const safe = sanitizeFileName(base) || 'label';
+        const safeName = sanitizeFileName(base) || 'label';
+        const safeSku = skuForName ? sanitizeFileName(String(skuForName)) : '';
         const time = new Date().toISOString().replace(/[:.]/g, '-');
-        const fileName = `${safe}-${time}.png`;
+        const fileName = safeSku ? `${safeName}-${safeSku}-${time}.png` : `${safeName}-${time}.png`;
 
         const a = document.createElement('a');
         a.href = dataUrl;
