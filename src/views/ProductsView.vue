@@ -353,52 +353,12 @@ async function downloadBarcodePNG() {
         ctx.drawImage(canvas, 0, 0);
       }
 
-      // compose final image with product name, SKU and timestamp below the barcode
+      // download the barcode image (only barcode, without additional text)
       try {
-        const selected = barcodeModalProduct.value;
-        const productName = selected?.name ?? '';
-        const skuText = barcodeModalValue.value || selected?.sku || '';
-        const timeText = new Date().toLocaleString();
+        const dataUrl = out.toDataURL('image/png');
 
-        const textLines: string[] = [];
-        if (productName) textLines.push(productName);
-        if (skuText) textLines.push(skuText);
-        textLines.push(timeText);
-
-        const textFontSize = Math.max(10, Math.round(barcodeFontSize.value));
-        const lineHeight = textFontSize + 6;
-        const padding = 6;
-        const textAreaHeight = textLines.length * lineHeight + padding * 2;
-
-        const final = document.createElement('canvas');
-        final.width = out.width;
-        final.height = out.height + textAreaHeight;
-        const fctx = final.getContext('2d');
-        if (!fctx) throw new Error('无法获得画布上下文');
-
-        // white background
-        fctx.fillStyle = '#ffffff';
-        fctx.fillRect(0, 0, final.width, final.height);
-
-        // draw barcode image
-        fctx.drawImage(out, 0, 0);
-
-        // draw text lines centered
-        fctx.fillStyle = '#222';
-        fctx.textBaseline = 'top';
-        fctx.font = `${textFontSize}px Arial, Helvetica, sans-serif`;
-        let y = out.height + padding;
-        for (const line of textLines) {
-          const metrics = fctx.measureText(line);
-          const x = Math.max(4, (final.width - metrics.width) / 2);
-          fctx.fillText(line, x, y);
-          y += lineHeight;
-        }
-
-        const dataUrl = final.toDataURL('image/png');
-
-        const skuForName = selected?.sku ?? barcodeModalValue.value ?? '';
-        const base = selected ? selected.name : (barcodeModalValue.value || 'label');
+        const skuForName = barcodeModalProduct.value?.sku ?? barcodeModalValue.value ?? '';
+        const base = barcodeModalProduct.value ? barcodeModalProduct.value.name : (barcodeModalValue.value || 'label');
         const safeName = sanitizeFileName(base) || 'label';
         const safeSku = skuForName ? sanitizeFileName(String(skuForName)) : '';
         const time = new Date().toISOString().replace(/[:.]/g, '-');
