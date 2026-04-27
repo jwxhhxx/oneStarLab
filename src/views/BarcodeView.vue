@@ -35,6 +35,12 @@ function generate() {
   }
 }
 
+function sanitizeFileName(name: string) {
+  if (!name) return '';
+  // Remove characters not allowed in Windows file names and trim
+  return name.replace(/[\\/:*?"<>|]/g, '').trim();
+}
+
 function downloadPNG() {
   if (!svgRef.value) return;
 
@@ -64,9 +70,13 @@ function downloadPNG() {
         return;
       }
 
-      const fileName = `barcode-${barcodeValue.value || selectedProductId.value || 'label'}-${new Date()
-        .toISOString()
-        .replace(/[:.]/g, '-')}.png`;
+      // 优先使用所选商品名作为文件名前缀，回退到手动输入的条码或商品 SKU 或 id
+      const selected = products.value.find((p) => p.id === selectedProductId.value);
+      const fallback = barcodeValue.value || (selected ? selected.sku : String(selectedProductId.value || 'label'));
+      const baseName = selected ? selected.name : fallback;
+      const safeBase = sanitizeFileName(baseName) || 'label';
+      const time = new Date().toISOString().replace(/[:.]/g, '-');
+      const fileName = `${safeBase}-${time}.png`;
 
       // 尝试使用 Web Share API（支持直接分享到手机并保存到相册）
       const nav: any = navigator;
