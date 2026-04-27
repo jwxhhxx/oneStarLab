@@ -352,22 +352,69 @@ async function downloadBarcodePNG() {
       } else {
         ctx.drawImage(canvas, 0, 0);
       }
-      const dataUrl = out.toDataURL('image/png');
 
-      const selected = barcodeModalProduct.value;
-      const base = selected ? selected.name : 'label';
-      const safe = sanitizeFileName(base) || 'label';
-      const time = new Date().toISOString().replace(/[:.]/g, '-');
-      const fileName = `${safe}-${time}.png`;
+      // compose final image with product name, SKU and timestamp below the barcode
+      try {
+        const selected = barcodeModalProduct.value;
+        const productName = selected?.name ?? '';
+        const skuText = barcodeModalValue.value || selected?.sku || '';
+        const timeText = new Date().toLocaleString();
 
-      const a = document.createElement('a');
-      a.href = dataUrl;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      // also update preview
-      barcodePreviewDataUrl.value = dataUrl;
+        const textLines: string[] = [];
+        if (productName) textLines.push(productName);
+        if (skuText) textLines.push(skuText);
+        textLines.push(timeText);
+
+        const textFontSize = Math.max(10, Math.round(barcodeFontSize.value));
+        const lineHeight = textFontSize + 6;
+        const padding = 6;
+        const textAreaHeight = textLines.length * lineHeight + padding * 2;
+
+        const final = document.createElement('canvas');
+        final.width = out.width;
+        final.height = out.height + textAreaHeight;
+        const fctx = final.getContext('2d');
+        if (!fctx) throw new Error('无法获得画布上下文');
+
+        // white background
+        fctx.fillStyle = '#ffffff';
+        fctx.fillRect(0, 0, final.width, final.height);
+
+        // draw barcode image
+        fctx.drawImage(out, 0, 0);
+
+        // draw text lines centered
+        fctx.fillStyle = '#222';
+        fctx.textBaseline = 'top';
+        fctx.font = `${textFontSize}px Arial, Helvetica, sans-serif`;
+        let y = out.height + padding;
+        for (const line of textLines) {
+          const metrics = fctx.measureText(line);
+          const x = Math.max(4, (final.width - metrics.width) / 2);
+          fctx.fillText(line, x, y);
+          y += lineHeight;
+        }
+
+        const dataUrl = final.toDataURL('image/png');
+
+        const base = selected ? selected.name : (barcodeModalValue.value || 'label');
+        const safe = sanitizeFileName(base) || 'label';
+        const time = new Date().toISOString().replace(/[:.]/g, '-');
+        const fileName = `${safe}-${time}.png`;
+
+        const a = document.createElement('a');
+        a.href = dataUrl;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+
+        // also update preview
+        barcodePreviewDataUrl.value = dataUrl;
+      } catch (e) {
+        console.error('生成最终图片失败', e);
+        window.alert('生成图片失败');
+      }
     } else {
       window.alert('生成图片失败');
     }
