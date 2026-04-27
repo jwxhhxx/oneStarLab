@@ -641,7 +641,7 @@ onUnmounted(() => {
     >
       <el-form ref="productFormRef" :model="form" :rules="rules" :label-width="isMobile ? 'auto' : '92px'" :label-position="isMobile ? 'top' : 'right'">
         <div class="form-grid">
-          <el-form-item label="商品名称"><el-input v-model="form.name" /></el-form-item>
+          <el-form-item prop="name" label="商品名称"><el-input v-model="form.name" /></el-form-item>
           <el-form-item label="SKU">
             <div style="display:flex;gap:8px;align-items:center">
               <template v-if="editingProductId">
