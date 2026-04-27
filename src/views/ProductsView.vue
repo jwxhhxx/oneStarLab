@@ -881,9 +881,9 @@ onUnmounted(() => {
 .controls-right{display:flex;gap:8px;align-items:center}
 .add-input{width:220px}
 .add-button{white-space:nowrap}
-.categories-section{margin-top:12px}
-.categories-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;align-items:start}
-.category-tag{display:flex;justify-content:space-between;align-items:center;padding:4px 8px}
+.categories-section{margin-top:12px;--tag-gap:8px;--tag-max:220px}
+.categories-grid{display:flex;flex-wrap:wrap;gap:var(--tag-gap);align-items:center;justify-content:flex-start}
+.category-tag{display:inline-flex;flex:0 0 auto;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;background:#fff;border:1px solid rgba(0,0,0,0.06);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:var(--tag-max);font-size:clamp(12px,1.2vw,14px)}
 .cat-count{opacity:0.7;margin-left:6px;font-size:12px}
 .empty-cat{color:#888;margin-top:8px}
 
@@ -896,11 +896,15 @@ onUnmounted(() => {
   .add-input{width:100%}
   .add-button{width:100%}
   .category-tag{padding:8px}
-  .categories-grid{grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
+  /* 小屏幕下启用横向可滑动（单行），并缩小标签最大宽度 */
+  .categories-grid{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:6px}
+  .categories-section{--tag-max:160px}
+  .category-tag{flex:0 0 auto}
 }
 
 @media (min-width: 769px){
-  .categories-grid{display:flex;flex-wrap:wrap}
+  /* 桌面保持 Grid 布局 */
+  .categories-grid{gap:8px}
   .category-tag{margin-right:8px;margin-bottom:8px}
 }
 </style>
