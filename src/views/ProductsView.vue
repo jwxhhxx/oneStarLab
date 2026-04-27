@@ -598,12 +598,14 @@ onUnmounted(() => {
         <div class="form-grid">
           <el-form-item label="商品名称"><el-input v-model="form.name" /></el-form-item>
           <el-form-item label="SKU">
-            <div style="display:flex;flex-direction:column;gap:6px">
-              <div style="display:flex;gap:8px;align-items:center">
-                <el-input v-model="form.sku" placeholder="自动生成 SKU" :disabled="!editingProductId" />
-                <el-button type="text" v-if="editingProductId" @click="calibrateSku">校准</el-button>
-              </div>
-              <div v-if="!editingProductId" style="font-size:12px;color:#888">预览 SKU：<span style="font-weight:600;color:#333">{{ skuPreview || '自动生成' }}</span></div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <template v-if="editingProductId">
+                <el-input v-model="form.sku" placeholder="自动生成 SKU" />
+                <el-button type="text" @click="calibrateSku">校准</el-button>
+              </template>
+              <template v-else>
+                <el-input :value="skuPreview || ''" placeholder="自动生成 SKU" disabled />
+              </template>
             </div>
           </el-form-item>
           <el-form-item label="分类">
