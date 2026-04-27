@@ -168,6 +168,31 @@ function isSkuValid(sku?: string) {
   return /^\d+-\d{4,}$/.test(sku);
 }
 
+function focusFormField(prop: string) {
+  nextTick(() => {
+    const container = document.querySelector('.mobile-form-dialog') as HTMLElement | null;
+    const selectors = [
+      `.el-form-item[data-prop="${prop}"] .el-input__inner`,
+      `.el-form-item[data-prop="${prop}"] textarea`,
+      `.el-form-item[data-prop="${prop}"] .el-select__input`,
+      `.el-form-item[data-prop="${prop}"] .el-select`,
+      `.el-form-item[data-prop="${prop}"] .el-input__inner`,
+    ];
+    let el: HTMLElement | null = null;
+    for (const sel of selectors) {
+      el = container ? (container.querySelector(sel) as HTMLElement | null) : (document.querySelector(sel) as HTMLElement | null);
+      if (el) break;
+    }
+    if (el && typeof el.focus === 'function') {
+      el.focus();
+      return;
+    }
+    // fallback: focus first input in dialog
+    const fallback = container ? container.querySelector('.el-input__inner, textarea, .el-select__input') as HTMLElement | null : document.querySelector('.el-input__inner, textarea, .el-select__input') as HTMLElement | null;
+    fallback?.focus();
+  });
+}
+
 async function calibrateSku() {
   try {
     const target = await store.generateSkuForCategory(form.category, editingProductId?.value ?? undefined);
@@ -468,11 +493,22 @@ function copySku() {
 
 async function submitProduct() {
   try {
-    // validate required fields (name)
-    try {
-      await productFormRef.value?.validate();
-    } catch (e) {
-      return;
+    // validate required fields (name) and focus first invalid field
+    if (productFormRef.value && productFormRef.value.validate) {
+      let ok = true;
+      await new Promise<void>((resolve, reject) => {
+        productFormRef.value.validate((valid: boolean, fields: Record<string, any>) => {
+          if (valid) resolve();
+          else {
+            const first = fields && Object.keys(fields)[0];
+            if (first) focusFormField(first);
+            reject(new Error('validation failed'));
+          }
+        });
+      }).catch(() => {
+        ok = false;
+      });
+      if (!ok) return;
     }
 
     // SKU validation
@@ -481,16 +517,19 @@ async function submitProduct() {
       const s = (form.sku || '').trim();
       if (!s) {
         ElMessage.error('编辑时 SKU 不能为空');
+        focusFormField('sku');
         return;
       }
       if (!isSkuValid(s)) {
         ElMessage.error('SKU 格式不正确，示例：1-0001');
+        focusFormField('sku');
         return;
       }
       // check uniqueness (exclude current product)
       const existing = await store.findProductByBarcode(s);
       if (existing && existing.id !== editingProductId.value) {
         ElMessage.error('该 SKU 已被其他商品使用');
+        focusFormField('sku');
         return;
       }
 
@@ -508,6 +547,7 @@ async function submitProduct() {
       }
       if (!isSkuValid(candidate)) {
         ElMessage.error('将生成的 SKU 格式不正确，请检查分类');
+        focusFormField('category');
         return;
       }
       // set the sku so addProduct will use this value (and avoid race when possible)
@@ -651,8 +691,8 @@ onUnmounted(() => {
     >
       <el-form ref="productFormRef" :model="form" :rules="rules" :label-width="isMobile ? 'auto' : '92px'" :label-position="isMobile ? 'top' : 'right'">
         <div class="form-grid">
-          <el-form-item prop="name" label="商品名称"><el-input v-model="form.name" /></el-form-item>
-          <el-form-item label="SKU">
+          <el-form-item prop="name" data-prop="name" label="商品名称"><el-input v-model="form.name" /></el-form-item>
+          <el-form-item prop="sku" data-prop="sku" label="SKU">
             <div style="display:flex;gap:8px;align-items:center">
               <template v-if="editingProductId">
                 <el-input v-model="form.sku" placeholder="自动生成 SKU" />
@@ -663,7 +703,7 @@ onUnmounted(() => {
               </template>
             </div>
           </el-form-item>
-          <el-form-item label="分类">
+          <el-form-item prop="category" data-prop="category" label="分类">
             <el-select v-model="form.category" filterable allow-create placeholder="选择或输入分类">
               <el-option v-for="c in store.categories" :key="c.id" :label="c.name" :value="c.name" />
             </el-select>
