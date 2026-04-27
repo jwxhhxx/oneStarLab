@@ -163,13 +163,13 @@ export const useShopStore = defineStore('shop', () => {
     }
   }
 
-  async function generateSkuForCategory(categoryName: string, excludeProductId?: number) {
+  async function generateSkuForCategory(categoryName: string, excludeProductId?: number, createIfMissing = true) {
     const nm = (categoryName || '').trim();
-    // ensure category exists
+    // ensure category exists (only create if requested)
     let cat = null as (import('@/types').Category | undefined) | null;
     if (nm) {
       cat = await db.categories.where('name').equals(nm).first();
-      if (!cat) {
+      if (!cat && createIfMissing) {
         await db.categories.add({ name: nm, createdAt: new Date().toISOString() });
         cat = await db.categories.where('name').equals(nm).first();
       }

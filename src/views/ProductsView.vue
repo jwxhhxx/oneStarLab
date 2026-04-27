@@ -31,6 +31,8 @@ const emptyForm = (): ProductInput => ({
 
 const form = reactive<ProductInput>(emptyForm());
 const newCategoryName = ref('');
+const skuPreview = ref('');
+let skuPreviewTimer: any = null;
 
 const tableRows = computed(() =>
   store.products.map((item) => ({
@@ -172,6 +174,33 @@ async function calibrateSku() {
     ElMessage.error('校准失败');
   }
 }
+
+// SKU 预览（新增表单使用，不在预览时创建分类）
+watch([
+  () => form.category,
+  () => store.products.length,
+  () => editingProductId.value,
+], () => {
+  if (skuPreviewTimer) clearTimeout(skuPreviewTimer);
+  skuPreviewTimer = setTimeout(async () => {
+    if (editingProductId.value) {
+      skuPreview.value = '';
+      return;
+    }
+    const nm = (form.category || '').trim();
+    if (!nm) {
+      skuPreview.value = '';
+      return;
+    }
+    skuPreview.value = '生成中...';
+    try {
+      const candidate = await store.generateSkuForCategory(nm, undefined, false);
+      skuPreview.value = candidate || '';
+    } catch (e) {
+      skuPreview.value = '';
+    }
+  }, 150);
+}, { immediate: true });
 
 async function openBarcodeModal(product: Product) {
   barcodeModalProduct.value = product;
@@ -459,6 +488,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   mediaQuery?.removeEventListener('change', handleViewportChange);
+  if (skuPreviewTimer) clearTimeout(skuPreviewTimer);
 });
 </script>
 
@@ -568,9 +598,12 @@ onUnmounted(() => {
         <div class="form-grid">
           <el-form-item label="商品名称"><el-input v-model="form.name" /></el-form-item>
           <el-form-item label="SKU">
-            <div style="display:flex;gap:8px;align-items:center">
-              <el-input v-model="form.sku" placeholder="自动生成 SKU" :disabled="!editingProductId" />
-              <el-button type="text" v-if="editingProductId" @click="calibrateSku">校准</el-button>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <div style="display:flex;gap:8px;align-items:center">
+                <el-input v-model="form.sku" placeholder="自动生成 SKU" :disabled="!editingProductId" />
+                <el-button type="text" v-if="editingProductId" @click="calibrateSku">校准</el-button>
+              </div>
+              <div v-if="!editingProductId" style="font-size:12px;color:#888">预览 SKU：<span style="font-weight:600;color:#333">{{ skuPreview || '自动生成' }}</span></div>
             </div>
           </el-form-item>
           <el-form-item label="分类">
