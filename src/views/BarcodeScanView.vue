@@ -18,6 +18,62 @@ const actionType = ref<'in' | 'out'>('in');
 const scannerError = ref<string | null>(null);
 const manualBarcode = ref('');
 
+const fileInputRef = ref<HTMLInputElement | null>(null);
+
+function triggerFileInput() {
+  fileInputRef.value?.click();
+}
+
+async function onFileSelected(e: Event) {
+  const input = e.target as HTMLInputElement;
+  if (!input.files || input.files.length === 0) return;
+  const files = Array.from(input.files);
+  const wasActive = active.value;
+  if (wasActive) stopScanner();
+
+  for (const f of files) {
+    try {
+      await decodeImageFile(f);
+    } catch (err) {
+      console.warn('decodeImageFile error', err);
+    }
+  }
+
+  input.value = '';
+  if (wasActive) startScanner();
+}
+
+async function decodeImageFile(file: File) {
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+
+  await new Promise<void>((resolve, reject) => {
+    img.onload = () => resolve();
+    img.onerror = (e) => reject(e);
+    img.src = url;
+  }).catch((e) => {
+    URL.revokeObjectURL(url);
+    throw e;
+  });
+
+  try {
+    // 使用 ZXing 的图片解码接口
+    const result = await (codeReader as any).decodeFromImageElement(img);
+    const code = result?.getText?.();
+    if (code) {
+      await handleScan(code);
+    } else {
+      window.alert('未能从图片识别到条码');
+    }
+  } catch (e) {
+    console.warn('decodeFromImageElement failed', e);
+    window.alert('图片解析失败：' + String(e));
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 const scannedItems = ref<Array<{ productId?: number; barcode: string; name?: string; sku?: string; quantity: number }>>([]);
 const lastScanAt: Record<string, number> = {};
 
@@ -186,6 +242,8 @@ onUnmounted(() => {
         </el-select>
         <el-input-number v-model="qty" :min="1" :max="9999" />
         <el-button type="primary" @click="confirmProcess" :disabled="!scannedProduct">确认</el-button>
+        <el-button @click="triggerFileInput">上传图片</el-button>
+        <input ref="fileInputRef" type="file" accept="image/*" style="display:none" @change="onFileSelected" multiple />
         <el-button @click="stopScanner">停止</el-button>
         <el-button @click="startScanner" v-if="!active">开始</el-button>
       </div>
