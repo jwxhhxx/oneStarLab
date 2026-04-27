@@ -156,9 +156,48 @@ export const useShopStore = defineStore('shop', () => {
     }
   }
 
-  async function deleteCategory(id: number) {
-    await db.categories.delete(id);
+  async function deleteCategory(id: number, reassignToName?: string | null) {
+    const cat = await db.categories.get(id);
+    if (!cat) return;
+
+    // find products using this category
+    const productsUsing = await db.products.where('category').equals(cat.name).toArray();
+
+    await db.transaction('rw', db.products, db.categories, async () => {
+      if (productsUsing.length > 0) {
+        if (reassignToName && reassignToName.trim()) {
+          // ensure target category exists
+          const targetName = reassignToName.trim();
+          const exists = await db.categories.where('name').equals(targetName).first();
+          if (!exists) {
+            await db.categories.add({ name: targetName, createdAt: new Date().toISOString() });
+          }
+
+          // update products to use the new category name
+          for (const p of productsUsing) {
+            await db.products.update(p.id!, { category: targetName });
+          }
+        } else {
+          // clear category field for affected products
+          for (const p of productsUsing) {
+            await db.products.update(p.id!, { category: '' });
+          }
+        }
+      }
+
+      await db.categories.delete(id);
+    });
+
     await loadAll();
+  }
+
+  function getCategoryUsageCounts() {
+    const map: Record<string, number> = {};
+    for (const p of products.value) {
+      const key = p.category || '';
+      map[key] = (map[key] || 0) + 1;
+    }
+    return map;
   }
 
   function buildOrderPayload(
@@ -725,6 +764,7 @@ export const useShopStore = defineStore('shop', () => {
     deleteExpense,
     getSuggestedPrice,
     getMinPrice,
+    getCategoryUsageCounts,
     categories,
     addCategory,
     deleteCategory,

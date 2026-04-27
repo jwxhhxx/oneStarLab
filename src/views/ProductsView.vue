@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, nextTick } from 'vue';
 import { ElMessage } from 'element-plus';
-import JsBarcode from 'jsbarcode';
 
 import { useShopStore } from '@/stores/useShopStore';
 import type { Product, ProductInput } from '@/types';
@@ -41,6 +40,8 @@ const tableRows = computed(() =>
   })),
 );
 
+const categoryCounts = computed(() => store.getCategoryUsageCounts());
+
 const summaryCards = computed(() => {
   const stockValue = store.products.reduce(
     (sum, item) => sum + (item.purchaseCost + item.packagingCost) * item.stock,
@@ -69,8 +70,20 @@ async function addCategoryUI() {
 
 async function handleDeleteCategory(id?: number) {
   if (!id) return;
-  if (!confirm('确认删除该分类？已被使用的商品不会被修改')) return;
-  await store.deleteCategory(id);
+  const cat = store.categories.find((x) => x.id === id);
+  if (!cat) return;
+  const count = categoryCounts.value[cat.name] || 0;
+  if (count > 0) {
+    const other = store.categories.filter((x) => x.id !== id).map((x) => x.name).join('，') || '无';
+    const msg = `该分类下有 ${count} 件商品。输入目标分类名称以重分配（或留空清空分类），取消则放弃。可选目标：${other}`;
+    const input = window.prompt(msg, other === '无' ? '' : '');
+    if (input === null) return; // canceled
+    const target = (input || '').trim();
+    await store.deleteCategory(id, target || undefined);
+  } else {
+    if (!confirm('确认删除该分类？')) return;
+    await store.deleteCategory(id);
+  }
 }
 
 function openCreateDialog() {
@@ -119,6 +132,23 @@ const barcodeModalProduct = ref<Product | null>(null);
 const barcodeModalValue = ref('');
 const barcodeSvgRef = ref<SVGSVGElement | null>(null);
 const barcodePreviewDataUrl = ref<string | null>(null);
+// barcode options
+const barcodeLabelSize = ref('38x25');
+const barcodeOrientation = ref<'portrait' | 'landscape'>('landscape');
+const barcodeFontSize = ref(14);
+
+const labelSizeOptions = [
+  { value: '38x25', label: '38×25 mm' },
+  { value: '50x30', label: '50×30 mm' },
+];
+
+let _jsBarcode: any = null;
+async function ensureJsBarcode() {
+  if (_jsBarcode) return _jsBarcode;
+  const mod = await import('jsbarcode');
+  _jsBarcode = mod.default ?? mod;
+  return _jsBarcode;
+}
 
 function sanitizeFileName(name: string) {
   if (!name) return '';
@@ -142,7 +172,8 @@ function generateBarcode() {
     return;
   }
 
-  const opts = { format: 'CODE128', displayValue: true, fontSize: 14, height: 60, width: 2 } as any;
+  const heightPx = barcodeLabelSize.value === '38x25' ? 60 : 80;
+  const opts = { format: 'CODE128', displayValue: true, fontSize: barcodeFontSize.value, height: heightPx, width: 2 } as any;
 
   let svgEl = barcodeSvgRef.value as any;
   if (!svgEl) {
@@ -152,6 +183,7 @@ function generateBarcode() {
   }
 
   try {
+    const JsBarcode = await ensureJsBarcode();
     JsBarcode(svgEl, value, opts);
   } catch (e) {
     console.error(e);
@@ -161,7 +193,8 @@ function generateBarcode() {
 
   try {
     const canvas = document.createElement('canvas');
-    JsBarcode(canvas as any, value, opts);
+    const JsBarcodeLib = await ensureJsBarcode();
+    JsBarcodeLib(canvas as any, value, opts);
     const out = document.createElement('canvas');
     out.width = canvas.width || 300;
     out.height = canvas.height || 80;
@@ -181,40 +214,78 @@ function generateBarcode() {
 }
 
 function downloadBarcodePNG() {
-  if (!barcodePreviewDataUrl.value) {
-    generateBarcode();
-  }
-  if (!barcodePreviewDataUrl.value) {
-    window.alert('无法生成图片');
+  // ensure fresh preview synchronously generated
+  const value = barcodeModalValue.value || barcodeModalProduct.value?.sku || barcodeModalProduct.value?.name || '';
+  if (!value) {
+    window.alert('请输入条码或 SKU');
     return;
   }
 
-  const selected = barcodeModalProduct.value;
-  const base = selected ? selected.name : 'label';
-  const safe = sanitizeFileName(base) || 'label';
-  const time = new Date().toISOString().replace(/[:.]/g, '-');
-  const fileName = `${safe}-${time}.png`;
+  // regenerate synchronously to avoid async-share issues on some mobile browsers
+  try {
+    const JsBarcodeLib = await ensureJsBarcode();
+    const canvas = document.createElement('canvas');
+    const heightPx = barcodeLabelSize.value === '38x25' ? 60 : 80;
+    const opts = { format: 'CODE128', displayValue: true, fontSize: barcodeFontSize.value, height: heightPx, width: 2 } as any;
+    JsBarcodeLib(canvas as any, value, opts);
 
-  const a = document.createElement('a');
-  a.href = barcodePreviewDataUrl.value;
-  a.download = fileName;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
+    const out = document.createElement('canvas');
+    out.width = canvas.width || 300;
+    out.height = canvas.height || 80;
+    const ctx = out.getContext('2d');
+    if (ctx) {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, out.width, out.height);
+      ctx.drawImage(canvas, 0, 0);
+      const dataUrl = out.toDataURL('image/png');
+
+      const selected = barcodeModalProduct.value;
+      const base = selected ? selected.name : 'label';
+      const safe = sanitizeFileName(base) || 'label';
+      const time = new Date().toISOString().replace(/[:.]/g, '-');
+      const fileName = `${safe}-${time}.png`;
+
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      // also update preview
+      barcodePreviewDataUrl.value = dataUrl;
+    } else {
+      window.alert('生成图片失败');
+    }
+  } catch (e) {
+    console.error('下载失败', e);
+    window.alert('下载失败');
+  }
 }
 
 function printBarcode() {
   if (!barcodeSvgRef.value) generateBarcode();
   const svgString = new XMLSerializer().serializeToString(barcodeSvgRef.value ?? document.createElementNS('http://www.w3.org/2000/svg', 'svg'));
   const productName = barcodeModalProduct.value?.name ?? '';
+
+  // determine label size
+  let w = 38;
+  let h = 25;
+  if (barcodeLabelSize.value === '50x30') {
+    w = 50;
+    h = 30;
+  }
+  if (barcodeOrientation.value === 'portrait') {
+    const tmp = w; w = h; h = tmp;
+  }
+
   const html = `
   <html>
     <head>
       <title>打印条码 - ${escapeHtml(productName)}</title>
       <style>
-        @page { size: 38mm 25mm; margin: 0; }
+        @page { size: ${w}mm ${h}mm; margin: 0; }
         body { margin: 0; display:flex; align-items:center; justify-content:center; height:100vh; }
-        .label { width:38mm; height:25mm; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+        .label { width:${w}mm; height:${h}mm; display:flex; flex-direction:column; align-items:center; justify-content:center; }
         .name { font-size:12px; margin-top:4px; }
       </style>
     </head>
@@ -303,7 +374,7 @@ onUnmounted(() => {
 
       <div style="margin-top:12px">
         <el-tag v-for="c in store.categories" :key="c.id" closable @close="handleDeleteCategory(c.id)" style="margin-right:8px;margin-bottom:8px;">
-          {{ c.name }}
+          {{ c.name }} <span style="opacity:0.7;margin-left:6px">· {{ categoryCounts[c.name] || 0 }}</span>
         </el-tag>
         <div v-if="!store.categories.length" style="color:#888;margin-top:8px">未定义分类，新增商品时可直接输入分类并保存。</div>
       </div>
@@ -391,15 +462,66 @@ onUnmounted(() => {
       </template>
     </el-dialog>
 
-    <el-dialog v-model="barcodeModalVisible" :title="barcodeModalProduct ? '条形码 - ' + barcodeModalProduct.name : '条形码'" width="420px" :destroy-on-close="true">
+    <el-drawer v-if="isMobile" v-model="barcodeModalVisible" :title="barcodeModalProduct ? '条形码 - ' + barcodeModalProduct.name : '条形码'" direction="btt" size="50%" :destroy-on-close="true">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+        <el-input v-model="barcodeModalValue" placeholder="条码或 SKU" style="flex:1" />
+        <el-button type="primary" @click="generateBarcode">生成</el-button>
+      </div>
+
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+        <el-select v-model="barcodeLabelSize" placeholder="标签尺寸" style="width:140px">
+          <el-option v-for="opt in labelSizeOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
+        </el-select>
+        <el-radio-group v-model="barcodeOrientation">
+          <el-radio-button label="landscape">横向</el-radio-button>
+          <el-radio-button label="portrait">纵向</el-radio-button>
+        </el-radio-group>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:12px;color:#666">字体</span>
+          <el-slider v-model="barcodeFontSize" :min="8" :max="24" style="width:120px" />
+        </div>
+      </div>
+
+      <div style="margin-top:6px">
+        <div v-if="barcodePreviewDataUrl">
+          <img :src="barcodePreviewDataUrl" alt="barcode" style="width:100%;max-height:160px;background:#fff;padding:6px;border-radius:6px;object-fit:contain;" />
+          <div style="margin-top:8px;display:flex;gap:8px">
+            <el-button @click="downloadBarcodePNG">下载 PNG</el-button>
+            <el-button type="success" @click="printBarcode">打印</el-button>
+          </div>
+          <div style="font-size:12px;color:#888;margin-top:6px">长按图片也可保存到手机（iOS/部分 WebView 需长按）</div>
+        </div>
+        <div v-else style="color:#888">请点击“生成”以预览条码。</div>
+      </div>
+
+      <template #footer>
+        <el-button @click="closeBarcodeModal">关闭</el-button>
+      </template>
+    </el-drawer>
+
+    <el-dialog v-else v-model="barcodeModalVisible" :title="barcodeModalProduct ? '条形码 - ' + barcodeModalProduct.name : '条形码'" width="520px" :destroy-on-close="true">
       <div style="display:flex;gap:8px;align-items:center;">
         <el-input v-model="barcodeModalValue" placeholder="条码或 SKU" style="flex:1" />
         <el-button type="primary" @click="generateBarcode">生成</el-button>
       </div>
 
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:12px;">
+        <el-select v-model="barcodeLabelSize" placeholder="标签尺寸" style="width:160px">
+          <el-option v-for="opt in labelSizeOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
+        </el-select>
+        <el-radio-group v-model="barcodeOrientation">
+          <el-radio-button label="landscape">横向</el-radio-button>
+          <el-radio-button label="portrait">纵向</el-radio-button>
+        </el-radio-group>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:12px;color:#666">字体</span>
+          <el-slider v-model="barcodeFontSize" :min="8" :max="24" style="width:160px" />
+        </div>
+      </div>
+
       <div style="margin-top:12px">
         <div v-if="barcodePreviewDataUrl">
-          <img :src="barcodePreviewDataUrl" alt="barcode" style="height:80px;background:#fff;padding:4px;border-radius:4px;" />
+          <img :src="barcodePreviewDataUrl" alt="barcode" style="height:120px;background:#fff;padding:6px;border-radius:6px;" />
           <div style="margin-top:8px;display:flex;gap:8px">
             <el-button @click="downloadBarcodePNG">下载 PNG</el-button>
             <el-button type="success" @click="printBarcode">打印</el-button>
