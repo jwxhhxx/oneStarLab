@@ -778,7 +778,6 @@ onUnmounted(() => {
     <el-drawer v-if="isMobile" v-model="barcodeModalVisible" :title="barcodeModalProduct ? '条形码 - ' + barcodeModalProduct.name : '条形码'" direction="btt" size="50%" :destroy-on-close="true">
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
         <el-input v-model="barcodeModalValue" placeholder="条码或 SKU" style="flex:1" :disabled="true" />
-        <el-button type="primary" @click="generateBarcode">生成</el-button>
         <el-button type="text" @click="copySku">复制</el-button>
       </div>
 
@@ -805,7 +804,7 @@ onUnmounted(() => {
           </div>
           <div style="font-size:12px;color:#888;margin-top:6px">长按图片也可保存到手机（iOS/部分 WebView 需长按）</div>
         </div>
-        <div v-else style="color:#888">请点击“生成”以预览条码。</div>
+        <div v-else style="color:#888">预览会在输入或设置变化时自动更新。</div>
       </div>
 
       <template #footer>
@@ -816,7 +815,6 @@ onUnmounted(() => {
     <el-dialog v-else v-model="barcodeModalVisible" :title="barcodeModalProduct ? '条形码 - ' + barcodeModalProduct.name : '条形码'" width="520px" :destroy-on-close="true">
       <div style="display:flex;gap:8px;align-items:center;">
         <el-input v-model="barcodeModalValue" placeholder="条码或 SKU" style="flex:1" :disabled="true" />
-        <el-button type="primary" @click="generateBarcode">生成</el-button>
         <el-button type="text" @click="copySku">复制</el-button>
       </div>
 
@@ -843,7 +841,7 @@ onUnmounted(() => {
           </div>
           <div style="font-size:12px;color:#888;margin-top:6px">长按图片也可保存到手机</div>
         </div>
-        <div v-else style="color:#888">请点击“生成”以预览条码。</div>
+        <div v-else style="color:#888">预览会在输入或设置变化时自动更新。</div>
       </div>
 
       <template #footer>
