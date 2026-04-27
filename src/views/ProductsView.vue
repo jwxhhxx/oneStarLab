@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref, nextTick } from 'vue';
+import { computed, onMounted, onUnmounted, reactive, ref, nextTick, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 
 import { useShopStore } from '@/stores/useShopStore';
@@ -150,6 +150,8 @@ async function ensureJsBarcode() {
   return _jsBarcode;
 }
 
+let regenTimer: any = null;
+
 function sanitizeFileName(name: string) {
   if (!name) return '';
   return name.replace(/[\\/:*?"<>|]/g, '').trim();
@@ -165,10 +167,10 @@ async function openBarcodeModal(product: Product) {
   generateBarcode();
 }
 
-async function generateBarcode() {
+async function generateBarcode(silent = false) {
   const value = barcodeModalValue.value || barcodeModalProduct.value?.sku || barcodeModalProduct.value?.name || '';
   if (!value) {
-    window.alert('请输入条码或 SKU');
+    if (!silent) window.alert('请输入条码或 SKU');
     return;
   }
 
@@ -226,6 +228,18 @@ async function generateBarcode() {
     barcodePreviewDataUrl.value = null;
   }
 }
+
+// 自动更新预览：当方向、标签尺寸、字体或输入值变化时，若弹窗打开则防抖触发生成
+watch(
+  [barcodeOrientation, barcodeLabelSize, barcodeFontSize, barcodeModalValue, barcodeModalVisible],
+  () => {
+    if (!barcodeModalVisible.value) return;
+    if (regenTimer) clearTimeout(regenTimer);
+    regenTimer = setTimeout(() => {
+      generateBarcode(true);
+    }, 150);
+  },
+);
 
 async function downloadBarcodePNG() {
   // ensure fresh preview synchronously generated
