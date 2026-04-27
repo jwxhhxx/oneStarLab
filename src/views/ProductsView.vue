@@ -692,7 +692,7 @@ onUnmounted(() => {
           </el-table-column>
           <el-table-column label="分类" width="100">
             <template #default="{ row }">
-              <el-tag effect="plain" round>{{ row.category }}</el-tag>
+              <el-tag :type="row.category === '未分类' ? 'warning' : undefined" effect="plain" round>{{ row.category }}</el-tag>
             </template>
           </el-table-column>
           <el-table-column label="SKU" width="160">
