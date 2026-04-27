@@ -19,7 +19,7 @@ const handleViewportChange = (event: MediaQueryListEvent) => {
 const emptyForm = (): ProductInput => ({
   name: '',
   sku: '',
-  category: '胶带',
+  category: store.categories.length ? store.categories[0].name : '胶带',
   supplier: '',
   purchaseCost: 0,
   packagingCost: 0,
@@ -30,6 +30,7 @@ const emptyForm = (): ProductInput => ({
 });
 
 const form = reactive<ProductInput>(emptyForm());
+const newCategoryName = ref('');
 
 const tableRows = computed(() =>
   store.products.map((item) => ({
@@ -56,6 +57,19 @@ const summaryCards = computed(() => {
 function resetForm() {
   editingProductId.value = null;
   Object.assign(form, emptyForm());
+}
+
+async function addCategoryUI() {
+  const nm = (newCategoryName.value || '').trim();
+  if (!nm) return;
+  await store.addCategory(nm);
+  newCategoryName.value = '';
+}
+
+async function handleDeleteCategory(id?: number) {
+  if (!id) return;
+  if (!confirm('确认删除该分类？已被使用的商品不会被修改')) return;
+  await store.deleteCategory(id);
 }
 
 function openCreateDialog() {
@@ -139,6 +153,24 @@ onUnmounted(() => {
       </div>
     </div>
 
+    <el-card class="section-card" style="margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+        <div style="flex:1">
+          <strong>商品分类</strong>
+          <div class="inline-tip">新增的分类会自动出现在新增/编辑商品的下拉中。</div>
+        </div>
+        <el-input v-model="newCategoryName" placeholder="新增分类" style="width:220px" @keyup.enter.native="addCategoryUI" />
+        <el-button type="primary" @click="addCategoryUI">添加分类</el-button>
+      </div>
+
+      <div style="margin-top:12px">
+        <el-tag v-for="c in store.categories" :key="c.id" closable @close="handleDeleteCategory(c.id)" style="margin-right:8px;margin-bottom:8px;">
+          {{ c.name }}
+        </el-tag>
+        <div v-if="!store.categories.length" style="color:#888;margin-top:8px">未定义分类，新增商品时可直接输入分类并保存。</div>
+      </div>
+    </el-card>
+
     <el-card class="section-card soft-table">
       <div class="toolbar">
         <div>
@@ -196,11 +228,8 @@ onUnmounted(() => {
           <el-form-item label="商品名称"><el-input v-model="form.name" /></el-form-item>
           <el-form-item label="SKU"><el-input v-model="form.sku" /></el-form-item>
           <el-form-item label="分类">
-            <el-select v-model="form.category">
-              <el-option label="胶带" value="胶带" />
-              <el-option label="贴纸" value="贴纸" />
-              <el-option label="便签" value="便签" />
-              <el-option label="套装" value="套装" />
+            <el-select v-model="form.category" filterable allow-create placeholder="选择或输入分类">
+              <el-option v-for="c in store.categories" :key="c.id" :label="c.name" :value="c.name" />
             </el-select>
           </el-form-item>
           <el-form-item label="供应商"><el-input v-model="form.supplier" /></el-form-item>

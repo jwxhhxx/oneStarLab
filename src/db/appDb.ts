@@ -6,6 +6,7 @@ class OneStarLabDb extends Dexie {
   products!: Table<Product, number>;
   orders!: Table<Order, number>;
   pricingRules!: Table<PricingRule, number>;
+  categories!: Table<import('@/types').Category, number>;
   labInspirations!: Table<LabInspiration, number>;
   labProjects!: Table<LabProject, number>;
   drawingInspirations!: Table<DrawingInspirationRecord, number>;
@@ -57,6 +58,18 @@ class OneStarLabDb extends Dexie {
       drawingInspirations: '++id,createdAt,completed',
       expenses: '++id,createdAt,purpose',
       inventoryTransactions: '++id,productId,barcode,type,createdAt',
+    });
+
+    this.version(6).stores({
+      products: '++id,sku,category,name,stock,createdAt',
+      orders: '++id,orderNo,channel,createdAt,status',
+      pricingRules: '++id',
+      labInspirations: '++id,status,tag,updatedAt',
+      labProjects: '++id,stage,launchDate,updatedAt',
+      drawingInspirations: '++id,createdAt,completed',
+      expenses: '++id,createdAt,purpose',
+      inventoryTransactions: '++id,productId,barcode,type,createdAt',
+      categories: '++id,name,createdAt',
     });
   }
 }

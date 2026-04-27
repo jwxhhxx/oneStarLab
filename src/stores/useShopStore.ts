@@ -36,6 +36,7 @@ export const useShopStore = defineStore('shop', () => {
   const loading = ref(false);
   const initialized = ref(false);
   const products = ref<Product[]>([]);
+  const categories = ref<import('@/types').Category[]>([]);
   const orders = ref<Order[]>([]);
   const pricingRule = ref<PricingRule>({ ...defaultPricingRule });
   const labInspirations = ref<LabInspiration[]>([]);
@@ -46,6 +47,7 @@ export const useShopStore = defineStore('shop', () => {
 
   async function loadAll() {
     products.value = await db.products.orderBy('createdAt').reverse().toArray();
+    categories.value = await db.categories.orderBy('name').toArray();
     orders.value = await db.orders.orderBy('createdAt').reverse().toArray();
     pricingRule.value = (await db.pricingRules.get(1)) ?? { ...defaultPricingRule };
     labInspirations.value = await db.labInspirations.orderBy('updatedAt').reverse().toArray();
@@ -74,6 +76,10 @@ export const useShopStore = defineStore('shop', () => {
   }
 
   async function addProduct(input: ProductInput) {
+    // ensure category exists
+    if (input.category && input.category.trim()) {
+      await addCategory(input.category.trim());
+    }
     const suggested = calculateSuggestedPrice(input.purchaseCost, input.packagingCost, pricingRule.value);
 
     await db.products.add({
@@ -86,6 +92,10 @@ export const useShopStore = defineStore('shop', () => {
   }
 
   async function updateProduct(id: number, input: ProductInput) {
+    // ensure category exists
+    if (input.category && input.category.trim()) {
+      await addCategory(input.category.trim());
+    }
     const suggested = calculateSuggestedPrice(input.purchaseCost, input.packagingCost, pricingRule.value);
 
     await db.products.update(id, {
@@ -98,6 +108,21 @@ export const useShopStore = defineStore('shop', () => {
 
   async function deleteProduct(id: number) {
     await db.products.delete(id);
+    await loadAll();
+  }
+
+  async function addCategory(name: string) {
+    const nm = (name || '').trim();
+    if (!nm) return;
+    const exists = await db.categories.where('name').equals(nm).first();
+    if (!exists) {
+      await db.categories.add({ name: nm, createdAt: new Date().toISOString() });
+      await loadAll();
+    }
+  }
+
+  async function deleteCategory(id: number) {
+    await db.categories.delete(id);
     await loadAll();
   }
 
@@ -665,6 +690,9 @@ export const useShopStore = defineStore('shop', () => {
     deleteExpense,
     getSuggestedPrice,
     getMinPrice,
+    categories,
+    addCategory,
+    deleteCategory,
   };
 });
 

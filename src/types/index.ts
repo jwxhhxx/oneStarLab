@@ -13,6 +13,12 @@ export interface Product {
   createdAt: string;
 }
 
+export interface Category {
+  id?: number;
+  name: string;
+  createdAt: string;
+}
+
 export interface OrderItem {
   productId: number;
   productName: string;
