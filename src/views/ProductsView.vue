@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
 import { ElMessage } from 'element-plus';
+import JsBarcode from 'jsbarcode';
 
 import { useShopStore } from '@/stores/useShopStore';
 import type { Product, ProductInput } from '@/types';
@@ -100,6 +101,59 @@ async function handleDeleteProduct(id: number) {
     ElMessage.success('商品已删除');
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '删除失败');
+  }
+}
+
+function escapeHtml(str: string) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function printProductBarcode(product: Product) {
+  const value = product.sku || product.name;
+  if (!value) {
+    window.alert('无可用 SKU 或条码');
+    return;
+  }
+
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  try {
+    JsBarcode(svg as any, value, { format: 'CODE128', displayValue: true, fontSize: 14, height: 60, width: 2 } as any);
+  } catch (e) {
+    console.error(e);
+    window.alert('生成条码失败');
+    return;
+  }
+
+  const serializer = new XMLSerializer();
+  const svgString = serializer.serializeToString(svg);
+  const html = `
+  <html>
+    <head>
+      <title>打印条码 - ${escapeHtml(product.name)}</title>
+      <style>
+        @page { size: 38mm 25mm; margin: 0; }
+        body { margin: 0; display:flex; align-items:center; justify-content:center; height:100vh; }
+        .label { width:38mm; height:25mm; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+        .name { font-size:12px; margin-top:4px; }
+      </style>
+    </head>
+    <body>
+      <div class="label">${svgString}<div class="name">${escapeHtml(product.name)}</div></div>
+      <script>window.onload = () => { window.print(); setTimeout(()=>window.close(), 200); };<\/script>
+    </body>
+  </html>`;
+
+  const w = window.open('', '_blank');
+  if (w) {
+    w.document.write(html);
+    w.document.close();
+  } else {
+    window.alert('浏览器阻止了弹窗，请允许弹窗以打印条码');
   }
 }
 
@@ -209,6 +263,7 @@ onUnmounted(() => {
           <el-table-column label="操作" width="150" fixed="right">
             <template #default="{ row }">
               <el-button link type="primary" @click="openEditDialog(row)">编辑</el-button>
+              <el-button link type="info" @click="printProductBarcode(row)">打印条形码</el-button>
               <el-button link type="danger" @click="handleDeleteProduct(row.id!)">删除</el-button>
             </template>
           </el-table-column>
