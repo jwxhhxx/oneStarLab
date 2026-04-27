@@ -117,30 +117,9 @@ export const useShopStore = defineStore('shop', () => {
       await addCategory(nm);
     }
 
-    // auto-generate SKU when not provided
+    // auto-generate SKU when not provided — use minimal-gap filling strategy
     if (!(input.sku || '').trim()) {
-      // try to get the category record to use its id as prefix
-      let cat = null as (import('@/types').Category | undefined) | null;
-      if (nm) cat = await db.categories.where('name').equals(nm).first();
-      const categoryId = (cat && cat.id) ? cat.id : 0;
-
-      // count existing products in this category to derive sequence
-      const existingCount = nm ? await db.products.where('category').equals(nm).count() : await db.products.count();
-      let seq = existingCount + 1;
-      let sku = `${categoryId}-${String(seq).padStart(4, '0')}`;
-
-      // ensure uniqueness (in case of race or manual SKUs)
-      // increment seq until an unused SKU is found
-      // note: this loop should be safe because sku space is large
-      // and collisions are unlikely; it prevents accidental overwrite
-      // if another product already has the same SKU.
-      // eslint-disable-next-line no-constant-condition
-      while (await db.products.where('sku').equals(sku).first()) {
-        seq += 1;
-        sku = `${categoryId}-${String(seq).padStart(4, '0')}`;
-      }
-
-      input.sku = sku;
+      input.sku = await generateSkuForCategory(nm, undefined);
     }
 
     const suggested = calculateSuggestedPrice(input.purchaseCost, input.packagingCost, pricingRule.value);
@@ -198,19 +177,41 @@ export const useShopStore = defineStore('shop', () => {
 
     const categoryId = (cat && cat.id) ? cat.id : 0;
 
-    const existingCount = nm ? await db.products.where('category').equals(nm).count() : await db.products.count();
-    let seq = existingCount + 1;
-    let sku = `${categoryId}-${String(seq).padStart(4, '0')}`;
+    // collect used sequence numbers for this category (matching `${categoryId}-NNNN`)
+    const prods = nm ? await db.products.where('category').equals(nm).toArray() : await db.products.toArray();
+    const used = new Set<number>();
+    const re = new RegExp(`^${categoryId}-(\\d+)$`);
+    for (const p of prods) {
+      if (!p.sku) continue;
+      const m = p.sku.match(re);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (!Number.isNaN(n) && n > 0) {
+          // when calibrating an existing product, exclude its own current SKU
+          if (excludeProductId && p.id === excludeProductId) continue;
+          used.add(n);
+        }
+      }
+    }
 
+    // find smallest missing positive integer starting from 1
+    let seq = 1;
+    while (used.has(seq)) seq += 1;
+
+    let candidate = `${categoryId}-${String(seq).padStart(4, '0')}`;
+
+    // extra safety: ensure global uniqueness (skip excluded product id)
+    // if collision happens (e.g., another product outside this category holds the SKU), increment until unique
+    // eslint-disable-next-line no-constant-condition
     while (true) {
-      const existing = await db.products.where('sku').equals(sku).first();
+      const existing = await db.products.where('sku').equals(candidate).first();
       if (!existing) break;
       if (excludeProductId && existing.id === excludeProductId) break;
       seq += 1;
-      sku = `${categoryId}-${String(seq).padStart(4, '0')}`;
+      candidate = `${categoryId}-${String(seq).padStart(4, '0')}`;
     }
 
-    return sku;
+    return candidate;
   }
 
   async function deleteCategory(id: number, reassignToName?: string | null) {

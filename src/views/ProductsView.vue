@@ -569,7 +569,7 @@ onUnmounted(() => {
           <el-form-item label="商品名称"><el-input v-model="form.name" /></el-form-item>
           <el-form-item label="SKU">
             <div style="display:flex;gap:8px;align-items:center">
-              <el-input v-model="form.sku" placeholder="留空将自动生成 SKU" :disabled="!editingProductId" />
+              <el-input v-model="form.sku" placeholder="自动生成 SKU" :disabled="!editingProductId" />
               <el-button type="text" v-if="editingProductId" @click="calibrateSku">校准</el-button>
             </div>
           </el-form-item>
