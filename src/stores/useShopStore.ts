@@ -184,6 +184,35 @@ export const useShopStore = defineStore('shop', () => {
     }
   }
 
+  async function generateSkuForCategory(categoryName: string, excludeProductId?: number) {
+    const nm = (categoryName || '').trim();
+    // ensure category exists
+    let cat = null as (import('@/types').Category | undefined) | null;
+    if (nm) {
+      cat = await db.categories.where('name').equals(nm).first();
+      if (!cat) {
+        await db.categories.add({ name: nm, createdAt: new Date().toISOString() });
+        cat = await db.categories.where('name').equals(nm).first();
+      }
+    }
+
+    const categoryId = (cat && cat.id) ? cat.id : 0;
+
+    const existingCount = nm ? await db.products.where('category').equals(nm).count() : await db.products.count();
+    let seq = existingCount + 1;
+    let sku = `${categoryId}-${String(seq).padStart(4, '0')}`;
+
+    while (true) {
+      const existing = await db.products.where('sku').equals(sku).first();
+      if (!existing) break;
+      if (excludeProductId && existing.id === excludeProductId) break;
+      seq += 1;
+      sku = `${categoryId}-${String(seq).padStart(4, '0')}`;
+    }
+
+    return sku;
+  }
+
   async function deleteCategory(id: number, reassignToName?: string | null) {
     const cat = await db.categories.get(id);
     if (!cat) return;
@@ -793,6 +822,7 @@ export const useShopStore = defineStore('shop', () => {
     getSuggestedPrice,
     getMinPrice,
     getCategoryUsageCounts,
+    generateSkuForCategory,
     categories,
     addCategory,
     deleteCategory,

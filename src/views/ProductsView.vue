@@ -157,6 +157,22 @@ function sanitizeFileName(name: string) {
   return name.replace(/[\\/:*?"<>|]/g, '').trim();
 }
 
+function isSkuValid(sku?: string) {
+  if (!sku) return false;
+  return /^\d+-\d{4,}$/.test(sku);
+}
+
+async function calibrateSku() {
+  try {
+    const target = await store.generateSkuForCategory(form.category, editingProductId?.value ?? undefined);
+    form.sku = target;
+    ElMessage.success('已校准 SKU: ' + target);
+  } catch (e) {
+    console.error(e);
+    ElMessage.error('校准失败');
+  }
+}
+
 async function openBarcodeModal(product: Product) {
   barcodeModalProduct.value = product;
   barcodeModalValue.value = product.sku || product.name || '';
@@ -507,7 +523,12 @@ onUnmounted(() => {
               <el-tag effect="plain" round>{{ row.category }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column prop="sku" label="SKU" width="140" />
+          <el-table-column label="SKU" width="160">
+            <template #default="{ row }">
+              <span :class="['sku-text', !isSkuValid(row.sku) ? 'sku-invalid' : '']">{{ row.sku || '—' }}</span>
+              <span v-if="!isSkuValid(row.sku)" style="margin-left:6px;color:#e6a23c;font-size:12px">(格式异常)</span>
+            </template>
+          </el-table-column>
           <el-table-column label="成本" width="120">
             <template #default="{ row }">{{ formatCurrency(row.purchaseCost + row.packagingCost) }}</template>
           </el-table-column>
@@ -546,7 +567,12 @@ onUnmounted(() => {
       <el-form :label-width="isMobile ? 'auto' : '92px'" :label-position="isMobile ? 'top' : 'right'">
         <div class="form-grid">
           <el-form-item label="商品名称"><el-input v-model="form.name" /></el-form-item>
-          <el-form-item label="SKU"><el-input v-model="form.sku" placeholder="留空将自动生成 SKU" /></el-form-item>
+          <el-form-item label="SKU">
+            <div style="display:flex;gap:8px;align-items:center">
+              <el-input v-model="form.sku" placeholder="留空将自动生成 SKU" :disabled="!editingProductId" />
+              <el-button type="text" v-if="editingProductId" @click="calibrateSku">校准</el-button>
+            </div>
+          </el-form-item>
           <el-form-item label="分类">
             <el-select v-model="form.category" filterable allow-create placeholder="选择或输入分类">
               <el-option v-for="c in store.categories" :key="c.id" :label="c.name" :value="c.name" />
@@ -660,6 +686,9 @@ onUnmounted(() => {
 .category-tag{display:flex;justify-content:space-between;align-items:center;padding:4px 8px}
 .cat-count{opacity:0.7;margin-left:6px;font-size:12px}
 .empty-cat{color:#888;margin-top:8px}
+
+.sku-text{display:inline-block;max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sku-invalid{color:#e6a23c;font-weight:600}
 
 @media (max-width: 768px){
   .category-controls{flex-direction:column;align-items:stretch}
