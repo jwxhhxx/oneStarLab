@@ -369,44 +369,69 @@ async function downloadBarcodePNG() {
       out.height = canvas.height || 80;
     }
     const ctx = out.getContext('2d');
-    if (ctx) {
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, out.width, out.height);
-      if (barcodeOrientation.value === 'portrait') {
-        ctx.save();
-        ctx.translate(out.width / 2, out.height / 2);
-        ctx.rotate(-Math.PI / 2);
-        ctx.drawImage(canvas, -canvas.width / 2, -canvas.height / 2);
-        ctx.restore();
-      } else {
-        ctx.drawImage(canvas, 0, 0);
-      }
+    if (!ctx) {
+      window.alert('生成图片失败');
+      return;
+    }
 
-      // download the barcode image (only barcode, without additional text)
-      try {
-        const dataUrl = out.toDataURL('image/png');
-
-        const skuForName = barcodeModalProduct.value?.sku ?? barcodeModalValue.value ?? '';
-        const base = barcodeModalProduct.value ? barcodeModalProduct.value.name : (barcodeModalValue.value || 'label');
-        const safeName = sanitizeFileName(base) || 'label';
-        const safeSku = skuForName ? sanitizeFileName(String(skuForName)) : '';
-        const time = new Date().toISOString().replace(/[:.]/g, '-');
-        const fileName = safeSku ? `${safeName}-${safeSku}-${time}.png` : `${safeName}-${time}.png`;
-
-        const a = document.createElement('a');
-        a.href = dataUrl;
-        a.download = fileName;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-
-        // also update preview
-        barcodePreviewDataUrl.value = dataUrl;
-      } catch (e) {
-        console.error('生成最终图片失败', e);
-        window.alert('生成图片失败');
-      }
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, out.width, out.height);
+    if (barcodeOrientation.value === 'portrait') {
+      ctx.save();
+      ctx.translate(out.width / 2, out.height / 2);
+      ctx.rotate(-Math.PI / 2);
+      ctx.drawImage(canvas, -canvas.width / 2, -canvas.height / 2);
+      ctx.restore();
     } else {
+      ctx.drawImage(canvas, 0, 0);
+    }
+
+    // prepare file name
+    const skuForName = barcodeModalProduct.value?.sku ?? barcodeModalValue.value ?? '';
+    const base = barcodeModalProduct.value ? barcodeModalProduct.value.name : (barcodeModalValue.value || 'label');
+    const safeName = sanitizeFileName(base) || 'label';
+    const safeSku = skuForName ? sanitizeFileName(String(skuForName)) : '';
+    const time = new Date().toISOString().replace(/[:.]/g, '-');
+    const fileName = safeSku ? `${safeName}-${safeSku}-${time}.png` : `${safeName}-${time}.png`;
+
+    try {
+      // Try Web Share API first (file sharing). Build a Blob and File from the canvas.
+      const blob: Blob | null = await new Promise((resolve) => out.toBlob((b) => resolve(b), 'image/png'));
+      if (!blob) throw new Error('生成图片 Blob 失败');
+
+      const file = new File([blob], fileName, { type: 'image/png' });
+      const nav: any = navigator;
+
+      // If canShare exists and supports files, use it.
+      if (nav && typeof nav.canShare === 'function' && nav.canShare({ files: [file] }) && typeof nav.share === 'function') {
+        try {
+          await nav.share({ files: [file], title: safeName });
+          // update preview from blob
+          const dataUrl = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result));
+            reader.onerror = () => resolve('');
+            reader.readAsDataURL(blob);
+          });
+          if (dataUrl) barcodePreviewDataUrl.value = dataUrl;
+          return;
+        } catch (shareErr) {
+          console.warn('Web Share 共享失败，回退到下载：', shareErr);
+          // fallthrough to download fallback
+        }
+      }
+
+      // Fallback: create dataURL and trigger download via anchor
+      const dataUrl = out.toDataURL('image/png');
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      barcodePreviewDataUrl.value = dataUrl;
+    } catch (e) {
+      console.error('生成或分享/下载失败', e);
       window.alert('生成图片失败');
     }
   } catch (e) {
