@@ -393,6 +393,30 @@ function closeBarcodeModal() {
   barcodeSvgRef.value = null;
 }
 
+function copySku() {
+  const txt = barcodeModalValue.value || '';
+  if (!txt) {
+    ElMessage.warning('当前无可复制的 SKU');
+    return;
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(txt).then(() => ElMessage.success('已复制 SKU'), () => ElMessage.error('复制失败'));
+  } else {
+    const ta = document.createElement('textarea');
+    ta.value = txt;
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      document.execCommand('copy');
+      ElMessage.success('已复制 SKU');
+    } catch (e) {
+      ElMessage.error('复制失败');
+    } finally {
+      ta.remove();
+    }
+  }
+}
+
 async function submitProduct() {
   try {
     if (editingProductId.value) {
@@ -522,7 +546,7 @@ onUnmounted(() => {
       <el-form :label-width="isMobile ? 'auto' : '92px'" :label-position="isMobile ? 'top' : 'right'">
         <div class="form-grid">
           <el-form-item label="商品名称"><el-input v-model="form.name" /></el-form-item>
-          <el-form-item label="SKU"><el-input v-model="form.sku" /></el-form-item>
+          <el-form-item label="SKU"><el-input v-model="form.sku" placeholder="留空将自动生成 SKU" /></el-form-item>
           <el-form-item label="分类">
             <el-select v-model="form.category" filterable allow-create placeholder="选择或输入分类">
               <el-option v-for="c in store.categories" :key="c.id" :label="c.name" :value="c.name" />
@@ -550,8 +574,9 @@ onUnmounted(() => {
 
     <el-drawer v-if="isMobile" v-model="barcodeModalVisible" :title="barcodeModalProduct ? '条形码 - ' + barcodeModalProduct.name : '条形码'" direction="btt" size="50%" :destroy-on-close="true">
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
-        <el-input v-model="barcodeModalValue" placeholder="条码或 SKU" style="flex:1" />
+        <el-input v-model="barcodeModalValue" placeholder="条码或 SKU" style="flex:1" :disabled="true" />
         <el-button type="primary" @click="generateBarcode">生成</el-button>
+        <el-button type="text" @click="copySku">复制</el-button>
       </div>
 
       <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
@@ -587,8 +612,9 @@ onUnmounted(() => {
 
     <el-dialog v-else v-model="barcodeModalVisible" :title="barcodeModalProduct ? '条形码 - ' + barcodeModalProduct.name : '条形码'" width="520px" :destroy-on-close="true">
       <div style="display:flex;gap:8px;align-items:center;">
-        <el-input v-model="barcodeModalValue" placeholder="条码或 SKU" style="flex:1" />
+        <el-input v-model="barcodeModalValue" placeholder="条码或 SKU" style="flex:1" :disabled="true" />
         <el-button type="primary" @click="generateBarcode">生成</el-button>
+        <el-button type="text" @click="copySku">复制</el-button>
       </div>
 
       <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:12px;">

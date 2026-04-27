@@ -111,10 +111,38 @@ export const useShopStore = defineStore('shop', () => {
   }
 
   async function addProduct(input: ProductInput) {
-    // ensure category exists
-    if (input.category && input.category.trim()) {
-      await addCategory(input.category.trim());
+    // ensure category exists first
+    const nm = (input.category || '').trim();
+    if (nm) {
+      await addCategory(nm);
     }
+
+    // auto-generate SKU when not provided
+    if (!(input.sku || '').trim()) {
+      // try to get the category record to use its id as prefix
+      let cat = null as (import('@/types').Category | undefined) | null;
+      if (nm) cat = await db.categories.where('name').equals(nm).first();
+      const categoryId = (cat && cat.id) ? cat.id : 0;
+
+      // count existing products in this category to derive sequence
+      const existingCount = nm ? await db.products.where('category').equals(nm).count() : await db.products.count();
+      let seq = existingCount + 1;
+      let sku = `${categoryId}-${String(seq).padStart(4, '0')}`;
+
+      // ensure uniqueness (in case of race or manual SKUs)
+      // increment seq until an unused SKU is found
+      // note: this loop should be safe because sku space is large
+      // and collisions are unlikely; it prevents accidental overwrite
+      // if another product already has the same SKU.
+      // eslint-disable-next-line no-constant-condition
+      while (await db.products.where('sku').equals(sku).first()) {
+        seq += 1;
+        sku = `${categoryId}-${String(seq).padStart(4, '0')}`;
+      }
+
+      input.sku = sku;
+    }
+
     const suggested = calculateSuggestedPrice(input.purchaseCost, input.packagingCost, pricingRule.value);
 
     await db.products.add({
