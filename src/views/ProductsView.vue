@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
+import { computed, onMounted, onUnmounted, reactive, ref, nextTick } from 'vue';
 import { ElMessage } from 'element-plus';
 import JsBarcode from 'jsbarcode';
 
@@ -113,28 +113,104 @@ function escapeHtml(str: string) {
     .replace(/'/g, '&#39;');
 }
 
-function printProductBarcode(product: Product) {
-  const value = product.sku || product.name;
+// Barcode modal state and helpers
+const barcodeModalVisible = ref(false);
+const barcodeModalProduct = ref<Product | null>(null);
+const barcodeModalValue = ref('');
+const barcodeSvgRef = ref<SVGSVGElement | null>(null);
+const barcodePreviewDataUrl = ref<string | null>(null);
+
+function sanitizeFileName(name: string) {
+  if (!name) return '';
+  return name.replace(/[\\/:*?"<>|]/g, '').trim();
+}
+
+async function openBarcodeModal(product: Product) {
+  barcodeModalProduct.value = product;
+  barcodeModalValue.value = product.sku || product.name || '';
+  barcodePreviewDataUrl.value = null;
+  barcodeSvgRef.value = null;
+  barcodeModalVisible.value = true;
+  await nextTick();
+  generateBarcode();
+}
+
+function generateBarcode() {
+  const value = barcodeModalValue.value || barcodeModalProduct.value?.sku || barcodeModalProduct.value?.name || '';
   if (!value) {
-    window.alert('无可用 SKU 或条码');
+    window.alert('请输入条码或 SKU');
     return;
   }
 
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  const opts = { format: 'CODE128', displayValue: true, fontSize: 14, height: 60, width: 2 } as any;
+
+  let svgEl = barcodeSvgRef.value as any;
+  if (!svgEl) {
+    const created = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    barcodeSvgRef.value = created as unknown as SVGSVGElement;
+    svgEl = created as any;
+  }
+
   try {
-    JsBarcode(svg as any, value, { format: 'CODE128', displayValue: true, fontSize: 14, height: 60, width: 2 } as any);
+    JsBarcode(svgEl, value, opts);
   } catch (e) {
     console.error(e);
     window.alert('生成条码失败');
     return;
   }
 
-  const serializer = new XMLSerializer();
-  const svgString = serializer.serializeToString(svg);
+  try {
+    const canvas = document.createElement('canvas');
+    JsBarcode(canvas as any, value, opts);
+    const out = document.createElement('canvas');
+    out.width = canvas.width || 300;
+    out.height = canvas.height || 80;
+    const ctx = out.getContext('2d');
+    if (ctx) {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, out.width, out.height);
+      ctx.drawImage(canvas, 0, 0);
+      barcodePreviewDataUrl.value = out.toDataURL('image/png');
+    } else {
+      barcodePreviewDataUrl.value = null;
+    }
+  } catch (e) {
+    console.warn('生成预览失败', e);
+    barcodePreviewDataUrl.value = null;
+  }
+}
+
+function downloadBarcodePNG() {
+  if (!barcodePreviewDataUrl.value) {
+    generateBarcode();
+  }
+  if (!barcodePreviewDataUrl.value) {
+    window.alert('无法生成图片');
+    return;
+  }
+
+  const selected = barcodeModalProduct.value;
+  const base = selected ? selected.name : 'label';
+  const safe = sanitizeFileName(base) || 'label';
+  const time = new Date().toISOString().replace(/[:.]/g, '-');
+  const fileName = `${safe}-${time}.png`;
+
+  const a = document.createElement('a');
+  a.href = barcodePreviewDataUrl.value;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+function printBarcode() {
+  if (!barcodeSvgRef.value) generateBarcode();
+  const svgString = new XMLSerializer().serializeToString(barcodeSvgRef.value ?? document.createElementNS('http://www.w3.org/2000/svg', 'svg'));
+  const productName = barcodeModalProduct.value?.name ?? '';
   const html = `
   <html>
     <head>
-      <title>打印条码 - ${escapeHtml(product.name)}</title>
+      <title>打印条码 - ${escapeHtml(productName)}</title>
       <style>
         @page { size: 38mm 25mm; margin: 0; }
         body { margin: 0; display:flex; align-items:center; justify-content:center; height:100vh; }
@@ -143,7 +219,7 @@ function printProductBarcode(product: Product) {
       </style>
     </head>
     <body>
-      <div class="label">${svgString}<div class="name">${escapeHtml(product.name)}</div></div>
+      <div class="label">${svgString}<div class="name">${escapeHtml(productName)}</div></div>
       <script>window.onload = () => { window.print(); setTimeout(()=>window.close(), 200); };<\/script>
     </body>
   </html>`;
@@ -155,6 +231,14 @@ function printProductBarcode(product: Product) {
   } else {
     window.alert('浏览器阻止了弹窗，请允许弹窗以打印条码');
   }
+}
+
+function closeBarcodeModal() {
+  barcodeModalVisible.value = false;
+  barcodeModalProduct.value = null;
+  barcodeModalValue.value = '';
+  barcodePreviewDataUrl.value = null;
+  barcodeSvgRef.value = null;
 }
 
 async function submitProduct() {
@@ -263,7 +347,7 @@ onUnmounted(() => {
           <el-table-column label="操作" width="150" fixed="right">
             <template #default="{ row }">
               <el-button link type="primary" @click="openEditDialog(row)">编辑</el-button>
-              <el-button link type="info" @click="printProductBarcode(row)">打印条形码</el-button>
+              <el-button link type="info" @click="openBarcodeModal(row)">打印条形码</el-button>
               <el-button link type="danger" @click="handleDeleteProduct(row.id!)">删除</el-button>
             </template>
           </el-table-column>
@@ -304,6 +388,29 @@ onUnmounted(() => {
           <el-button @click="dialogVisible = false">取消</el-button>
           <el-button type="primary" @click="submitProduct">{{ editingProductId ? '更新商品' : '保存商品' }}</el-button>
         </div>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="barcodeModalVisible" :title="barcodeModalProduct ? '条形码 - ' + barcodeModalProduct.name : '条形码'" width="420px" :destroy-on-close="true">
+      <div style="display:flex;gap:8px;align-items:center;">
+        <el-input v-model="barcodeModalValue" placeholder="条码或 SKU" style="flex:1" />
+        <el-button type="primary" @click="generateBarcode">生成</el-button>
+      </div>
+
+      <div style="margin-top:12px">
+        <div v-if="barcodePreviewDataUrl">
+          <img :src="barcodePreviewDataUrl" alt="barcode" style="height:80px;background:#fff;padding:4px;border-radius:4px;" />
+          <div style="margin-top:8px;display:flex;gap:8px">
+            <el-button @click="downloadBarcodePNG">下载 PNG</el-button>
+            <el-button type="success" @click="printBarcode">打印</el-button>
+          </div>
+          <div style="font-size:12px;color:#888;margin-top:6px">长按图片也可保存到手机</div>
+        </div>
+        <div v-else style="color:#888">请点击“生成”以预览条码。</div>
+      </div>
+
+      <template #footer>
+        <el-button @click="closeBarcodeModal">关闭</el-button>
       </template>
     </el-dialog>
   </div>
