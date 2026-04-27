@@ -165,7 +165,7 @@ async function openBarcodeModal(product: Product) {
   generateBarcode();
 }
 
-function generateBarcode() {
+async function generateBarcode() {
   const value = barcodeModalValue.value || barcodeModalProduct.value?.sku || barcodeModalProduct.value?.name || '';
   if (!value) {
     window.alert('请输入条码或 SKU');
@@ -213,7 +213,7 @@ function generateBarcode() {
   }
 }
 
-function downloadBarcodePNG() {
+async function downloadBarcodePNG() {
   // ensure fresh preview synchronously generated
   const value = barcodeModalValue.value || barcodeModalProduct.value?.sku || barcodeModalProduct.value?.name || '';
   if (!value) {
@@ -295,10 +295,10 @@ function printBarcode() {
     </body>
   </html>`;
 
-  const w = window.open('', '_blank');
-  if (w) {
-    w.document.write(html);
-    w.document.close();
+  const win = window.open('', '_blank');
+  if (win) {
+    win.document.write(html);
+    win.document.close();
   } else {
     window.alert('浏览器阻止了弹窗，请允许弹窗以打印条码');
   }
@@ -363,21 +363,26 @@ onUnmounted(() => {
     </div>
 
     <el-card class="section-card" style="margin-bottom:12px">
-      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-        <div style="flex:1">
-          <strong>商品分类</strong>
-          <div class="inline-tip">新增的分类会自动出现在新增/编辑商品的下拉中。</div>
+        <div class="category-controls" style="align-items:center;">
+          <div style="flex:1">
+            <strong>商品分类</strong>
+            <div class="inline-tip">新增的分类会自动出现在新增/编辑商品的下拉中。</div>
+          </div>
+          <div class="controls-right">
+            <el-input v-model="newCategoryName" placeholder="新增分类" class="add-input" @keyup.enter.native="addCategoryUI" />
+            <el-button type="primary" class="add-button" @click="addCategoryUI">添加分类</el-button>
+          </div>
         </div>
-        <el-input v-model="newCategoryName" placeholder="新增分类" style="width:220px" @keyup.enter.native="addCategoryUI" />
-        <el-button type="primary" @click="addCategoryUI">添加分类</el-button>
-      </div>
 
-      <div style="margin-top:12px">
-        <el-tag v-for="c in store.categories" :key="c.id" closable @close="handleDeleteCategory(c.id)" style="margin-right:8px;margin-bottom:8px;">
-          {{ c.name }} <span style="opacity:0.7;margin-left:6px">· {{ categoryCounts[c.name] || 0 }}</span>
-        </el-tag>
-        <div v-if="!store.categories.length" style="color:#888;margin-top:8px">未定义分类，新增商品时可直接输入分类并保存。</div>
-      </div>
+        <div class="categories-section">
+          <div v-if="!store.categories.length" class="empty-cat" style="color:#888;margin-top:8px">未定义分类，新增商品时可直接输入分类并保存。</div>
+          <div v-else class="categories-grid">
+            <el-tag v-for="c in store.categories" :key="c.id" closable @close="handleDeleteCategory(c.id)" class="category-tag">
+              <span class="cat-label">{{ c.name }}</span>
+              <span class="cat-count">· {{ categoryCounts[c.name] || 0 }}</span>
+            </el-tag>
+          </div>
+        </div>
     </el-card>
 
     <el-card class="section-card soft-table">
@@ -537,3 +542,29 @@ onUnmounted(() => {
     </el-dialog>
   </div>
 </template>
+
+<style scoped>
+.category-controls{display:flex;gap:12px;flex-wrap:wrap}
+.controls-right{display:flex;gap:8px;align-items:center}
+.add-input{width:220px}
+.add-button{white-space:nowrap}
+.categories-section{margin-top:12px}
+.categories-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;align-items:start}
+.category-tag{display:flex;justify-content:space-between;align-items:center;padding:4px 8px}
+.cat-count{opacity:0.7;margin-left:6px;font-size:12px}
+.empty-cat{color:#888;margin-top:8px}
+
+@media (max-width: 768px){
+  .category-controls{flex-direction:column;align-items:stretch}
+  .controls-right{flex-direction:row;gap:8px}
+  .add-input{width:100%}
+  .add-button{width:100%}
+  .category-tag{padding:8px}
+  .categories-grid{grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
+}
+
+@media (min-width: 769px){
+  .categories-grid{display:flex;flex-wrap:wrap}
+  .category-tag{margin-right:8px;margin-bottom:8px}
+}
+</style>
