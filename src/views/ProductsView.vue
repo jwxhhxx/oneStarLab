@@ -196,13 +196,27 @@ async function generateBarcode() {
     const JsBarcodeLib = await ensureJsBarcode();
     JsBarcodeLib(canvas as any, value, opts);
     const out = document.createElement('canvas');
-    out.width = canvas.width || 300;
-    out.height = canvas.height || 80;
+    // handle orientation: portrait rotates the barcode
+    if (barcodeOrientation.value === 'portrait') {
+      out.width = canvas.height || 80;
+      out.height = canvas.width || 300;
+    } else {
+      out.width = canvas.width || 300;
+      out.height = canvas.height || 80;
+    }
     const ctx = out.getContext('2d');
     if (ctx) {
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, out.width, out.height);
-      ctx.drawImage(canvas, 0, 0);
+      if (barcodeOrientation.value === 'portrait') {
+        ctx.save();
+        ctx.translate(out.width / 2, out.height / 2);
+        ctx.rotate(-Math.PI / 2);
+        ctx.drawImage(canvas, -canvas.width / 2, -canvas.height / 2);
+        ctx.restore();
+      } else {
+        ctx.drawImage(canvas, 0, 0);
+      }
       barcodePreviewDataUrl.value = out.toDataURL('image/png');
     } else {
       barcodePreviewDataUrl.value = null;
@@ -230,13 +244,26 @@ async function downloadBarcodePNG() {
     JsBarcodeLib(canvas as any, value, opts);
 
     const out = document.createElement('canvas');
-    out.width = canvas.width || 300;
-    out.height = canvas.height || 80;
+    if (barcodeOrientation.value === 'portrait') {
+      out.width = canvas.height || 80;
+      out.height = canvas.width || 300;
+    } else {
+      out.width = canvas.width || 300;
+      out.height = canvas.height || 80;
+    }
     const ctx = out.getContext('2d');
     if (ctx) {
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, out.width, out.height);
-      ctx.drawImage(canvas, 0, 0);
+      if (barcodeOrientation.value === 'portrait') {
+        ctx.save();
+        ctx.translate(out.width / 2, out.height / 2);
+        ctx.rotate(-Math.PI / 2);
+        ctx.drawImage(canvas, -canvas.width / 2, -canvas.height / 2);
+        ctx.restore();
+      } else {
+        ctx.drawImage(canvas, 0, 0);
+      }
       const dataUrl = out.toDataURL('image/png');
 
       const selected = barcodeModalProduct.value;
@@ -262,45 +289,85 @@ async function downloadBarcodePNG() {
   }
 }
 
-function printBarcode() {
-  if (!barcodeSvgRef.value) generateBarcode();
-  const svgString = new XMLSerializer().serializeToString(barcodeSvgRef.value ?? document.createElementNS('http://www.w3.org/2000/svg', 'svg'));
-  const productName = barcodeModalProduct.value?.name ?? '';
-
-  // determine label size
-  let w = 38;
-  let h = 25;
-  if (barcodeLabelSize.value === '50x30') {
-    w = 50;
-    h = 30;
-  }
-  if (barcodeOrientation.value === 'portrait') {
-    const tmp = w; w = h; h = tmp;
+async function printBarcode() {
+  const value = barcodeModalValue.value || barcodeModalProduct.value?.sku || barcodeModalProduct.value?.name || '';
+  if (!value) {
+    window.alert('请输入条码或 SKU');
+    return;
   }
 
-  const html = `
-  <html>
-    <head>
-      <title>打印条码 - ${escapeHtml(productName)}</title>
-      <style>
-        @page { size: ${w}mm ${h}mm; margin: 0; }
-        body { margin: 0; display:flex; align-items:center; justify-content:center; height:100vh; }
-        .label { width:${w}mm; height:${h}mm; display:flex; flex-direction:column; align-items:center; justify-content:center; }
-        .name { font-size:12px; margin-top:4px; }
-      </style>
-    </head>
-    <body>
-      <div class="label">${svgString}<div class="name">${escapeHtml(productName)}</div></div>
-      <script>window.onload = () => { window.print(); setTimeout(()=>window.close(), 200); };<\/script>
-    </body>
-  </html>`;
+  // generate image respecting orientation
+  try {
+    const JsBarcodeLib = await ensureJsBarcode();
+    const canvas = document.createElement('canvas');
+    const heightPx = barcodeLabelSize.value === '38x25' ? 60 : 80;
+    const opts = { format: 'CODE128', displayValue: true, fontSize: barcodeFontSize.value, height: heightPx, width: 2 } as any;
+    JsBarcodeLib(canvas as any, value, opts);
 
-  const win = window.open('', '_blank');
-  if (win) {
-    win.document.write(html);
-    win.document.close();
-  } else {
-    window.alert('浏览器阻止了弹窗，请允许弹窗以打印条码');
+    const out = document.createElement('canvas');
+    if (barcodeOrientation.value === 'portrait') {
+      out.width = canvas.height || 80;
+      out.height = canvas.width || 300;
+    } else {
+      out.width = canvas.width || 300;
+      out.height = canvas.height || 80;
+    }
+    const ctx = out.getContext('2d');
+    if (!ctx) throw new Error('无法获得画布上下文');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, out.width, out.height);
+    if (barcodeOrientation.value === 'portrait') {
+      ctx.save();
+      ctx.translate(out.width / 2, out.height / 2);
+      ctx.rotate(-Math.PI / 2);
+      ctx.drawImage(canvas, -canvas.width / 2, -canvas.height / 2);
+      ctx.restore();
+    } else {
+      ctx.drawImage(canvas, 0, 0);
+    }
+
+    const dataUrl = out.toDataURL('image/png');
+
+    // determine label size in mm for @page
+    let w = 38;
+    let h = 25;
+    if (barcodeLabelSize.value === '50x30') {
+      w = 50;
+      h = 30;
+    }
+    if (barcodeOrientation.value === 'portrait') {
+      const tmp = w; w = h; h = tmp;
+    }
+
+    const productName = barcodeModalProduct.value?.name ?? '';
+    const html = `
+      <html>
+        <head>
+          <title>打印条码 - ${escapeHtml(productName)}</title>
+          <style>
+            @page { size: ${w}mm ${h}mm; margin: 0; }
+            body { margin: 0; display:flex; align-items:center; justify-content:center; height:100vh; }
+            .label { width:${w}mm; height:${h}mm; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+            .label img{ max-width:100%; max-height:100%; display:block; }
+            .name { font-size:12px; margin-top:4px; }
+          </style>
+        </head>
+        <body>
+          <div class="label"><img src="${dataUrl}" alt="barcode" /><div class="name">${escapeHtml(productName)}</div></div>
+          <script>window.onload = () => { window.print(); setTimeout(()=>window.close(), 200); };<\/script>
+        </body>
+      </html>`;
+
+    const win = window.open('', '_blank');
+    if (win) {
+      win.document.write(html);
+      win.document.close();
+    } else {
+      window.alert('浏览器阻止了弹窗，请允许弹窗以打印条码');
+    }
+  } catch (e) {
+    console.error('打印失败', e);
+    window.alert('打印失败');
   }
 }
 
