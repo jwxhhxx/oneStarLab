@@ -592,7 +592,17 @@ onUnmounted(() => {
 
       <div class="table-scroll">
         <el-table :data="tableRows" empty-text="暂无商品，先新增一条吧。">
-          <el-table-column prop="name" label="商品名称" min-width="160" show-overflow-tooltip />
+          <el-table-column label="商品名称" min-width="160">
+            <template #default="{ row }">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span v-if="row.name && row.name.trim()" style="display:inline-block;max-width:240px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ row.name }}</span>
+                <span v-else style="color:#f56c6c;font-weight:600">（缺少名称）</span>
+                <el-tooltip v-if="!row.name || !row.name.trim()" content="旧数据缺少商品名称，点击 编辑 以补全" placement="top">
+                  <span style="color:#f56c6c;margin-left:6px;font-weight:700">⚠</span>
+                </el-tooltip>
+              </div>
+            </template>
+          </el-table-column>
           <el-table-column label="分类" width="100">
             <template #default="{ row }">
               <el-tag effect="plain" round>{{ row.category }}</el-tag>
