@@ -896,10 +896,10 @@ onUnmounted(() => {
   .add-input{width:100%}
   .add-button{width:100%}
   .category-tag{padding:8px}
-  /* 小屏幕下启用横向可滑动（单行），并缩小标签最大宽度 */
-  .categories-grid{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:6px}
+  /* 方案2：小屏幕改为换行，并允许标签内部换行显示完整长文本 */
+  .categories-grid{flex-wrap:wrap;overflow-x:visible;padding-bottom:6px}
   .categories-section{--tag-max:160px}
-  .category-tag{flex:0 0 auto}
+  .category-tag{flex:0 0 auto;white-space:normal;overflow-wrap:anywhere;word-break:break-word;max-width:100%}
 }
 
 @media (min-width: 769px){
