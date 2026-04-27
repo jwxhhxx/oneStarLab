@@ -68,10 +68,45 @@ export const useShopStore = defineStore('shop', () => {
         await db.pricingRules.put({ ...defaultPricingRule });
       }
 
+      // Ensure categories table has sensible defaults and any existing product categories
+      await ensureCategoriesSeeded();
+
       await loadAll();
       initialized.value = true;
     } finally {
       loading.value = false;
+    }
+  }
+
+  async function ensureCategoriesSeeded() {
+    const defaultCats = ['胶带', '贴纸', '便签', '套装'];
+
+    const existing = await db.categories.toArray();
+    const existingNames = new Set(existing.map((c) => c.name));
+
+    const toAddSet = new Set<string>();
+
+    // always ensure defaults exist
+    for (const d of defaultCats) {
+      if (!existingNames.has(d)) toAddSet.add(d);
+    }
+
+    // if there are no categories stored, extract from products for compatibility
+    if (existing.length === 0) {
+      const prods = await db.products.toArray();
+      for (const p of prods) {
+        if (p.category && p.category.trim() && !existingNames.has(p.category.trim())) {
+          toAddSet.add(p.category.trim());
+        }
+      }
+    }
+
+    if (toAddSet.size > 0) {
+      await db.transaction('rw', db.categories, async () => {
+        for (const name of toAddSet) {
+          await db.categories.add({ name, createdAt: new Date().toISOString() });
+        }
+      });
     }
   }
 
