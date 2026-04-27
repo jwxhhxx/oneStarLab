@@ -79,14 +79,18 @@ async function handleDeleteCategory(id?: number) {
   const cat = store.categories.find((x) => x.id === id);
   if (!cat) return;
   const count = categoryCounts.value[cat.name] || 0;
-  if (count > 0) {
-    const other = store.categories.filter((x) => x.id !== id).map((x) => x.name).join('，') || '无';
-    const msg = `该分类下有 ${count} 件商品。输入目标分类名称以重分配（或留空清空分类），取消则放弃。可选目标：${other}`;
-    const input = window.prompt(msg, other === '无' ? '' : '');
-    if (input === null) return; // canceled
-    const target = (input || '').trim();
-    await store.deleteCategory(id, target || undefined);
-  } else {
+    if (count > 0) {
+      const other = store.categories.filter((x) => x.id !== id).map((x) => x.name).join('，') || '无';
+      const msg = `该分类下有 ${count} 件商品。输入目标分类名称以重分配（或留空重分配到未分类），取消则放弃。可选目标：${other}`;
+      const input = window.prompt(msg, other === '无' ? '' : '');
+      if (input === null) return; // canceled
+      let target = (input || '').trim();
+      if (!target) {
+        // empty means assign to default '未分类'
+        target = '未分类';
+      }
+      await store.deleteCategory(id, target);
+    } else {
     if (!confirm('确认删除该分类？')) return;
     await store.deleteCategory(id);
   }

@@ -79,14 +79,26 @@ export const useShopStore = defineStore('shop', () => {
   }
 
   async function ensureCategoriesSeeded() {
+    // ensure there is always a stable "未分类" category with id = 0
     const defaultCats = ['胶带', '贴纸', '便签', '套装'];
 
     const existing = await db.categories.toArray();
     const existingNames = new Set(existing.map((c) => c.name));
 
+    // create explicit "未分类" with id 0 when missing
+    if (!existingNames.has('未分类')) {
+      try {
+        // explicit put with id 0 — Dexie allows specifying a key even when ++id is declared
+        await db.categories.put({ id: 0, name: '未分类', createdAt: new Date().toISOString() });
+        existingNames.add('未分类');
+      } catch (e) {
+        // ignore failures: fall back to normal add below
+      }
+    }
+
     const toAddSet = new Set<string>();
 
-    // always ensure defaults exist
+    // always ensure other defaults exist
     for (const d of defaultCats) {
       if (!existingNames.has(d)) toAddSet.add(d);
     }
