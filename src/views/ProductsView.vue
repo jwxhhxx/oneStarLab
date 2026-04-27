@@ -388,7 +388,7 @@ onUnmounted(() => {
     <el-card class="section-card soft-table">
       <div class="toolbar">
         <div>
-          <h2>商品中心</h2>
+          <h2>商品列表</h2>
           <div class="inline-tip">录入商品、查看库存、参考建议售价</div>
         </div>
         <el-button type="primary" @click="openCreateDialog">新增商品</el-button>
@@ -396,7 +396,7 @@ onUnmounted(() => {
 
       <div class="table-scroll">
         <el-table :data="tableRows" empty-text="暂无商品，先新增一条吧。">
-          <el-table-column prop="name" label="商品名称" min-width="220" />
+          <el-table-column prop="name" label="商品名称" min-width="160" show-overflow-tooltip />
           <el-table-column label="分类" width="100">
             <template #default="{ row }">
               <el-tag effect="plain" round>{{ row.category }}</el-tag>
@@ -423,7 +423,7 @@ onUnmounted(() => {
           <el-table-column label="操作" width="150" fixed="right">
             <template #default="{ row }">
               <el-button link type="primary" @click="openEditDialog(row)">编辑</el-button>
-              <el-button link type="info" @click="openBarcodeModal(row)">打印条形码</el-button>
+              <el-button link type="info" @click="openBarcodeModal(row)">条码</el-button>
               <el-button link type="danger" @click="handleDeleteProduct(row.id!)">删除</el-button>
             </template>
           </el-table-column>
