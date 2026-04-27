@@ -30,6 +30,10 @@ const emptyForm = (): ProductInput => ({
 });
 
 const form = reactive<ProductInput>(emptyForm());
+const productFormRef = ref<any>(null);
+const rules = {
+  name: [{ required: true, message: '请输入商品名称', trigger: 'blur' }],
+};
 const newCategoryName = ref('');
 const skuPreview = ref('');
 let skuPreviewTimer: any = null;
@@ -464,10 +468,51 @@ function copySku() {
 
 async function submitProduct() {
   try {
+    // validate required fields (name)
+    try {
+      await productFormRef.value?.validate();
+    } catch (e) {
+      return;
+    }
+
+    // SKU validation
     if (editingProductId.value) {
+      // editing: SKU must be present and match format
+      const s = (form.sku || '').trim();
+      if (!s) {
+        ElMessage.error('编辑时 SKU 不能为空');
+        return;
+      }
+      if (!isSkuValid(s)) {
+        ElMessage.error('SKU 格式不正确，示例：1-0001');
+        return;
+      }
+      // check uniqueness (exclude current product)
+      const existing = await store.findProductByBarcode(s);
+      if (existing && existing.id !== editingProductId.value) {
+        ElMessage.error('该 SKU 已被其他商品使用');
+        return;
+      }
+
       await store.updateProduct(editingProductId.value, { ...form });
       ElMessage.success('商品已更新');
     } else {
+      // creating: ensure name present (already validated) and preview/generated SKU is valid
+      let candidate = skuPreview.value;
+      if (!candidate || candidate === '生成中...') {
+        try {
+          candidate = await store.generateSkuForCategory((form.category || '').trim());
+        } catch (e) {
+          candidate = '';
+        }
+      }
+      if (!isSkuValid(candidate)) {
+        ElMessage.error('将生成的 SKU 格式不正确，请检查分类');
+        return;
+      }
+      // set the sku so addProduct will use this value (and avoid race when possible)
+      form.sku = candidate;
+
       await store.addProduct({ ...form });
       ElMessage.success('商品已录入');
     }
@@ -594,7 +639,7 @@ onUnmounted(() => {
       width="720px"
       class="mobile-form-dialog"
     >
-      <el-form :label-width="isMobile ? 'auto' : '92px'" :label-position="isMobile ? 'top' : 'right'">
+      <el-form ref="productFormRef" :model="form" :rules="rules" :label-width="isMobile ? 'auto' : '92px'" :label-position="isMobile ? 'top' : 'right'">
         <div class="form-grid">
           <el-form-item label="商品名称"><el-input v-model="form.name" /></el-form-item>
           <el-form-item label="SKU">
