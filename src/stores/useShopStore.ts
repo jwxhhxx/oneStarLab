@@ -230,6 +230,11 @@ export const useShopStore = defineStore('shop', () => {
     const cat = await db.categories.get(id);
     if (!cat) return;
 
+    // protect the default fallback category
+    if (cat.name === '未分类' || id === 0) {
+      throw new Error('默认分类 “未分类” 不可删除');
+    }
+
     // find products using this category
     const productsUsing = await db.products.where('category').equals(cat.name).toArray();
 

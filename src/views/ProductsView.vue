@@ -85,24 +85,39 @@ async function addCategoryUI() {
 }
 
 async function handleDeleteCategory(id?: number) {
-  if (!id) return;
+  if (id == null) return;
   const cat = store.categories.find((x) => x.id === id);
   if (!cat) return;
+
+  // prevent deleting default fallback
+  if (cat.name === '未分类') {
+    ElMessage.warning('默认分类“未分类”不可删除');
+    return;
+  }
+
   const count = categoryCounts.value[cat.name] || 0;
-    if (count > 0) {
-      const other = store.categories.filter((x) => x.id !== id).map((x) => x.name).join('，') || '无';
-      const msg = `该分类下有 ${count} 件商品。输入目标分类名称以重分配（或留空重分配到未分类），取消则放弃。可选目标：${other}`;
-      const input = window.prompt(msg, other === '无' ? '' : '');
-      if (input === null) return; // canceled
-      let target = (input || '').trim();
-      if (!target) {
-        // empty means assign to default '未分类'
-        target = '未分类';
-      }
+  if (count > 0) {
+    const other = store.categories.filter((x) => x.id !== id).map((x) => x.name).join('，') || '无';
+    const msg = `该分类下有 ${count} 件商品。输入目标分类名称以重分配（或留空重分配到未分类），取消则放弃。可选目标：${other}`;
+    const input = window.prompt(msg, other === '无' ? '' : '');
+    if (input === null) return; // canceled
+    let target = (input || '').trim();
+    if (!target) {
+      // empty means assign to default '未分类'
+      target = '未分类';
+    }
+    try {
       await store.deleteCategory(id, target);
-    } else {
+    } catch (e) {
+      ElMessage.error(e instanceof Error ? e.message : '删除失败');
+    }
+  } else {
     if (!confirm('确认删除该分类？')) return;
-    await store.deleteCategory(id);
+    try {
+      await store.deleteCategory(id);
+    } catch (e) {
+      ElMessage.error(e instanceof Error ? e.message : '删除失败');
+    }
   }
 }
 
@@ -639,7 +654,7 @@ onUnmounted(() => {
             <el-tag
               v-for="c in displayCategories"
               :key="c.id"
-              closable
+              :closable="c.name !== '未分类'"
               @close="handleDeleteCategory(c.id)"
               class="category-tag"
               :type="c.name === '未分类' ? 'warning' : undefined"
