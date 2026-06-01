@@ -85,6 +85,7 @@ View -> Store -> Dexie Table
 
 - 页面组件采用懒加载。
 - 使用 meta.title 并在 afterEach 中统一更新 document.title。
+- 印章相关能力统一在单一路由页面中，通过页内 Tab 切换文字印章与点阵印章。
 
 ## 第三方库使用要点
 

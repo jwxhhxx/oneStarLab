@@ -57,6 +57,19 @@
 
 检查 [src/router/index.ts](src/router/index.ts) 中 route meta.title 与 afterEach 逻辑。
 
+### 修改代码后 dev 页面未实时更新
+
+优先按以下顺序排查：
+
+1. 先强制刷新页面（Ctrl+Shift+R）。
+2. 确认仅有一个 dev 进程在运行且端口一致。
+3. 重启 `npm run dev`。
+4. 若仍偶发，使用轮询监听启动：
+
+```bash
+CHOKIDAR_USEPOLLING=true npm run dev -- --host 0.0.0.0 --port 5173
+```
+
 ### 图表重复渲染或内存占用增长
 
 检查图表组件是否在 onUnmounted 时调用 dispose。
