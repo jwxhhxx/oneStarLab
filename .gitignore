@@ -7,3 +7,4 @@ Thumbs.db
 .vscode/
 .github/skills/
 .claude/skills/
+.github/agent-handoff/*
