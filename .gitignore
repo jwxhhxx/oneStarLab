@@ -6,3 +6,4 @@ Thumbs.db
 *.log
 .vscode/
 .github/skills/
+.claude/skills/

@@ -57,6 +57,12 @@ const router = createRouter({
       component: () => import('@/views/ExpensesView.vue'),
       meta: { title: '支出记录' },
     },
+    {
+      path: '/halftone',
+      name: 'halftone',
+      component: () => import('@/views/HalftoneView.vue'),
+      meta: { title: '印章生成' },
+    },
   ],
 });
 
