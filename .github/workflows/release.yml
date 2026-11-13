@@ -1,0 +1,168 @@
+name: Release
+
+# 发布流程：
+#   1. verify   —— 前端构建 + 后端编译检查
+#   2. publish  —— 构建 linux/amd64 镜像并推送到阿里云 ACR
+#   3. deploy   —— 通过 SSH 在 VPS 上执行 docker compose 拉取并重启
+#
+# 触发方式：
+#   - 推送 v* 标签（推荐）：git tag v1.0.0 && git push origin v1.0.0
+#   - 手动 workflow_dispatch（可指定镜像标签，留空则用 sha-<7位>）
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '部署到 VPS 的镜像标签（留空则使用 sha-<7位提交号>）'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: 构建检查
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Type check and build frontend
+        run: npm run build
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Build and vet backend
+        working-directory: backend
+        run: |
+          go build ./...
+          go vet ./...
+
+  publish:
+    name: 推送镜像到 ACR
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      image: ${{ steps.meta.outputs.image }}
+    env:
+      IMAGE: ${{ secrets.ACR_REGISTRY }}/${{ secrets.ACR_NAMESPACE }}/onestarlab
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve image tag
+        id: meta
+        shell: bash
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            tag="${GITHUB_REF_NAME}"
+          elif [ -n "${INPUT_TAG}" ]; then
+            tag="${INPUT_TAG}"
+          else
+            tag="sha-${GITHUB_SHA::7}"
+          fi
+          case "$tag" in
+            *[!A-Za-z0-9._-]*) echo "非法的镜像标签：$tag" >&2; exit 1 ;;
+          esac
+          {
+            echo "tag=${tag}"
+            echo "image=${IMAGE}"
+          } >> "$GITHUB_OUTPUT"
+          echo "镜像：${IMAGE}:${tag}"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to ACR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.ACR_REGISTRY }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: ${{ vars.TARGET_PLATFORM || 'linux/amd64' }}
+          push: true
+          provenance: false
+          tags: |
+            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}
+            ${{ steps.meta.outputs.image }}:latest
+          cache-from: type=registry,ref=${{ steps.meta.outputs.image }}:buildcache
+          cache-to: type=registry,ref=${{ steps.meta.outputs.image }}:buildcache,mode=max
+
+  deploy:
+    name: 部署到 VPS
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    steps:
+      - name: SSH deploy
+        shell: bash
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+          IMAGE_TAG: ${{ needs.publish.outputs.tag }}
+        run: |
+          set -euo pipefail
+
+          : "${VPS_HOST:?缺少 VPS_HOST}"
+          : "${VPS_USER:?缺少 VPS_USER}"
+          : "${VPS_SSH_KEY:?缺少 VPS_SSH_KEY}"
+          VPS_PORT="${VPS_PORT:-22}"
+          case "$IMAGE_TAG" in
+            *[!A-Za-z0-9._-]*) echo "非法的镜像标签：$IMAGE_TAG" >&2; exit 1 ;;
+          esac
+
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$VPS_SSH_KEY" | tr -d '\r' > "$HOME/.ssh/onestarlab_deploy"
+          chmod 600 "$HOME/.ssh/onestarlab_deploy"
+
+          if [ -n "${VPS_KNOWN_HOSTS:-}" ]; then
+            printf '%s\n' "$VPS_KNOWN_HOSTS" | tr -d '\r' > "$HOME/.ssh/known_hosts"
+          else
+            ssh-keyscan -p "$VPS_PORT" -H "$VPS_HOST" > "$HOME/.ssh/known_hosts" 2>/dev/null
+          fi
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+          ssh -i "$HOME/.ssh/onestarlab_deploy" \
+            -p "$VPS_PORT" \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+            -o ConnectTimeout=15 \
+            "$VPS_USER@$VPS_HOST" \
+            "cd /opt/onestarlab && IMAGE_TAG='${IMAGE_TAG}' ./deploy.sh"

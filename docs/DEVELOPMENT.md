@@ -30,6 +30,13 @@ Windows 上如果 PowerShell 执行策略禁止 `npm.ps1`，把命令里的 `npm
 - 查看状态：`docker compose ps`、`docker compose logs -f`
 - 停止：`docker compose down`（`./data` 中的数据库保留）
 
+生产发布（需要先完成 [DEPLOYMENT.md](DEPLOYMENT.md) 里的 ACR / VPS / Secrets 配置）：
+
+- 打标签发布：`git tag -a v1.0.0 -m "release v1.0.0" && git push origin v1.0.0`
+- 手动触发：GitHub Actions → Release → Run workflow
+- 检查生产编排：`docker compose -f deploy/docker-compose.yml --env-file deploy/.env.example config -q`
+- 服务器侧执行：`/opt/onestarlab/deploy.sh <tag>`
+
 说明：当前没有单元测试脚本；后端接口与页面流程按下方回归清单人工验证。
 
 ## 推荐开发流程
@@ -125,3 +132,4 @@ docker compose build
 8. 刷新浏览器后数据仍在（服务端 SQLite）。
 9. 数据中心导出 JSON，再导入同一文件，数据保持一致。
 10. `docker compose up --build -d` 后 `docker compose ps` 显示 healthy，页面与 API 均可访问；重启容器后数据不丢。
+11. 发布生产前：`release.yml` 三段（verify / publish / deploy）在测试 tag 上跑通，VPS `deploy.sh` 健康检查与回滚日志正常。

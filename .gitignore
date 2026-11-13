@@ -11,3 +11,5 @@ Thumbs.db
 data/
 backend/data/
 .edge-*/
+deploy/.env
+deploy/backups/

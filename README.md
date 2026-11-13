@@ -80,6 +80,7 @@ backend/
 docs/                   架构、业务、开发、API 与验收文档
 Dockerfile
 compose.yaml
+deploy/                 生产部署（ACR 镜像编排、deploy.sh、backup.sh）
 data/                   Compose 挂载的 SQLite 目录（已 gitignore）
 ```
 
@@ -123,6 +124,19 @@ docker compose up --build -d
 
 容器内置健康检查（`/api/v1/health`），`docker compose ps` 显示 `healthy` 即表示服务与静态资源都正常。
 
+## 生产部署
+
+生产方案：GitHub Actions 构建镜像 → 推送阿里云 ACR → Actions 通过 SSH 在 VPS 上执行 `docker compose pull && up -d`。
+
+仓库已包含：
+
+- [`.github/workflows/release.yml`](.github/workflows/release.yml)：tag 发布、构建推送、SSH 部署
+- [`deploy/docker-compose.yml`](deploy/docker-compose.yml)：VPS 侧编排（使用 ACR 镜像，不在服务器构建）
+- [`deploy/deploy.sh`](deploy/deploy.sh)：拉取、启动、健康检查与自动回滚
+- [`deploy/backup.sh`](deploy/backup.sh)：SQLite 备份
+
+阿里云 ACR、VPS 与 GitHub Secrets 的完整配置步骤见 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)。
+
 ## 构建与检查
 
 ```bash
@@ -165,5 +179,6 @@ docker compose build     # 构建运行镜像
 - 架构与数据流：[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - 业务说明与操作流程：[docs/BUSINESS.md](docs/BUSINESS.md)
 - 开发与维护指南：[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
+- 生产部署（ACR + VPS）：[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
 - REST API 参考：[docs/API.md](docs/API.md)
 - 本地验收清单：[docs/ACCEPTANCE.md](docs/ACCEPTANCE.md)

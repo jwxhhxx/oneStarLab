@@ -186,9 +186,10 @@ View → Pinia store → src/api/client.ts → HTTP /api/v1
 
 - 前端：`npm run build` 输出 `dist/`（含 vue-tsc 类型检查）。
 - 后端：`go build ./...`；容器内 `CGO_ENABLED=0 go build -trimpath -ldflags="-s -w"`。
-- 镜像（[Dockerfile](Dockerfile)）三阶段：Node 构建前端 → Go 编译后端 → Alpine 运行；运行阶段非 root 用户，`WEB_DIR=/app/web`，`/data` 为数据卷。
-- 编排（[compose.yaml](compose.yaml)）：单服务，`8080:8080`，`./data:/data`，内置健康检查。
-- 不再使用 GitHub Pages；GitHub Actions 只做构建与校验，不发布静态站点。
+- 镜像（[Dockerfile](../Dockerfile)）三阶段：Node 构建前端 → Go 编译后端 → Alpine 运行；运行阶段非 root 用户，`WEB_DIR=/app/web`，`/data` 为数据卷。
+- 编排（[compose.yaml](../compose.yaml)）：本地单服务，`8080:8080`，`./data:/data`，内置健康检查。
+- 生产发布（[release.yml](../.github/workflows/release.yml)）：tag 触发 → 构建并推送阿里云 ACR → SSH 到 VPS 执行 [deploy/docker-compose.yml](../deploy/docker-compose.yml) 与 [deploy/deploy.sh](../deploy/deploy.sh)；服务器不保存源码、不构建镜像。
+- 不再使用 GitHub Pages；`ci.yml` 只做构建与校验，`release.yml` 负责镜像与部署。
 
 ## 第三方库使用要点
 
