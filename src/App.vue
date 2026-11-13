@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Calendar, DataAnalysis, EditPen, Files, Goods, MagicStick, Menu, Money, Picture, Shop, Tickets } from '@element-plus/icons-vue';
+import { Calendar, Coin, DataAnalysis, EditPen, Files, Goods, MagicStick, Menu, Money, Picture, Tickets } from '@element-plus/icons-vue';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 
@@ -37,7 +37,7 @@ const menus = [
   { path: '/', label: '经营看板', icon: DataAnalysis },
   { path: '/products', label: '商品中心', icon: Goods },
   { path: '/orders', label: '订单中心', icon: Tickets },
-  { path: '/markets', label: '集市记录', icon: Shop },
+  { path: '/income', label: '收入记录', icon: Coin },
   { path: '/pricing', label: '自动定价', icon: Money },
   { path: '/expenses', label: '支出记录', icon: Money },
   { path: '/scan', label: '扫码出入库', icon: Tickets },

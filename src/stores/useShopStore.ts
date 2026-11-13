@@ -47,6 +47,8 @@ export const useShopStore = defineStore('shop', () => {
   const expenses = ref<ExpenseRecord[]>([]);
   const inventoryTransactions = ref<InventoryTransaction[]>([]);
   const markets = ref<MarketRecord[]>([]);
+  const onlineIncome = ref(0);
+  const onlineIncomeUpdatedAt = ref('');
   const MAX_CATEGORY_NAME_LENGTH = 10;
 
   async function loadAll() {
@@ -60,6 +62,10 @@ export const useShopStore = defineStore('shop', () => {
     expenses.value = await db.expenses.orderBy('createdAt').reverse().toArray();
     inventoryTransactions.value = await db.inventoryTransactions.orderBy('createdAt').reverse().toArray();
     markets.value = await db.markets.orderBy('date').reverse().toArray();
+
+    const onlineIncomeSetting = await db.settings.get('onlineIncome');
+    onlineIncome.value = onlineIncomeSetting ? Number(onlineIncomeSetting.value) || 0 : 0;
+    onlineIncomeUpdatedAt.value = onlineIncomeSetting?.updatedAt ?? '';
   }
 
   async function initialize() {
@@ -823,6 +829,21 @@ export const useShopStore = defineStore('shop', () => {
     await loadAll();
   }
 
+  async function saveOnlineIncome(amount: number) {
+    const value = Number(amount);
+
+    if (!Number.isFinite(value) || value < 0) {
+      throw new Error('线上收入需为不小于 0 的数字');
+    }
+
+    await db.settings.put({
+      key: 'onlineIncome',
+      value: String(value),
+      updatedAt: new Date().toISOString(),
+    });
+    await loadAll();
+  }
+
   return {
     loading,
     initialized,
@@ -835,6 +856,8 @@ export const useShopStore = defineStore('shop', () => {
     expenses,
     inventoryTransactions,
     markets,
+    onlineIncome,
+    onlineIncomeUpdatedAt,
     stats,
     lowStockProducts,
     recentOrders,
@@ -872,6 +895,7 @@ export const useShopStore = defineStore('shop', () => {
     addMarket,
     updateMarket,
     deleteMarket,
+    saveOnlineIncome,
     getSuggestedPrice,
     getMinPrice,
     getCategoryUsageCounts,

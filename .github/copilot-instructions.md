@@ -15,7 +15,8 @@
   - Database schema/indexes are defined in `src/db/appDb.ts`.
   - Route map and page-level lazy loading live in `src/router/index.ts`.
 - Data flow should remain: View -> Pinia store actions -> Dexie tables.
-- Expense and market records are managed as separate Dexie tables and page flows; keep them independent from order profit calculations unless a task explicitly asks to combine them.
+- Expense and market records are managed as separate Dexie tables; the income page (`/income`) combines market income with the manual `onlineIncome` setting and subtracts `expenses` for a display-only profit. Keep these independent from order profit calculations unless a task explicitly asks to combine them.
+- Manual online income is stored in the `settings` table under the `onlineIncome` key with an `updatedAt` timestamp; update it through the store action, not by writing Dexie from a view.
 
 ## Build and Test
 - Install deps: `npm install`

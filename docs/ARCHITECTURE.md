@@ -33,6 +33,7 @@ View -> Store -> Dexie Table
 职责：
 
 - 管理 products、orders、expenses、markets、pricingRule、labInspirations、labProjects。
+- 维护线上收入（`settings` 表中 `onlineIncome` 键）与更新时间，收入页据此计算总收入与利润。
 - 提供 CRUD action 与业务流程（例如下单扣减库存）。
 - 通过 loadAll 统一刷新状态，确保 UI 与数据库一致。
 
@@ -61,7 +62,7 @@ View -> Store -> Dexie Table
 
 职责：
 
-- 统一管理 Product、Order、PricingRule、LabProject、MarketRecord 等业务模型。
+- 统一管理 Product、Order、PricingRule、LabProject、MarketRecord、AppSetting 等业务模型。
 - 作为 Store、View、DB 的共同契约。
 
 建议：
@@ -85,6 +86,7 @@ View -> Store -> Dexie Table
 
 - 页面组件采用懒加载。
 - 使用 meta.title 并在 afterEach 中统一更新 document.title。
+- 收入记录统一在 `/income` 页面（集市收入 + 线上收入 + 利润），旧的 `/markets` 保留为跳转到 `/income` 的重定向。
 - 印章相关能力统一在单一路由页面中，通过页内 Tab 切换文字印章与点阵印章。
 
 ## 第三方库使用要点

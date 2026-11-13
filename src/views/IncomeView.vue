@@ -2,7 +2,7 @@
 import { Search } from '@element-plus/icons-vue';
 import dayjs from 'dayjs';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 
 import { useShopStore } from '@/stores/useShopStore';
 import type { MarketInput, MarketRecord } from '@/types';
@@ -13,6 +13,8 @@ const dialogVisible = ref(false);
 const editingId = ref<number | null>(null);
 const keyword = ref('');
 const isMobile = ref(false);
+const onlineIncomeDraft = ref(0);
+const savingOnlineIncome = ref(false);
 
 let mediaQuery: MediaQueryList | null = null;
 const handleViewportChange = (event: MediaQueryListEvent) => {
@@ -39,24 +41,64 @@ const filteredMarkets = computed(() => {
   return store.markets.filter((item) => item.name.includes(kw) || item.location.includes(kw));
 });
 
-const totalIncome = computed(() => store.markets.reduce((sum, item) => sum + item.income, 0));
+const marketIncomeTotal = computed(() =>
+  store.markets.reduce((sum, item) => sum + Number(item.income || 0), 0),
+);
 
-const summaryCards = computed(() => {
-  const currentMonth = dayjs().format('YYYY-MM');
-  const monthIncome = store.markets
-    .filter((item) => item.date.startsWith(currentMonth))
-    .reduce((sum, item) => sum + item.income, 0);
+const totalIncome = computed(() => marketIncomeTotal.value + Number(store.onlineIncome || 0));
 
-  return [
-    { label: '累计场次', value: `${store.markets.length} 场` },
-    { label: '累计收入', value: formatCurrency(totalIncome.value) },
-    { label: '本月收入', value: formatCurrency(monthIncome) },
-    {
-      label: '场均收入',
-      value: formatCurrency(store.markets.length ? totalIncome.value / store.markets.length : 0),
-    },
-  ];
-});
+const totalExpense = computed(() =>
+  store.expenses.reduce((sum, item) => sum + Number(item.amount || 0), 0),
+);
+
+const profit = computed(() => Number((totalIncome.value - totalExpense.value).toFixed(2)));
+
+const isLoss = computed(() => profit.value < 0);
+
+function formatProfit(value: number) {
+  return value < 0 ? `-${formatCurrency(Math.abs(value))}` : formatCurrency(value);
+}
+
+const summaryCards = computed(() => [
+  {
+    label: '总收入',
+    value: formatCurrency(totalIncome.value),
+    hint: `集市 ${formatCurrency(marketIncomeTotal.value)} + 线上 ${formatCurrency(store.onlineIncome)}`,
+    negative: false,
+  },
+  {
+    label: '线上收入',
+    value: formatCurrency(store.onlineIncome),
+    hint: '手工维护，建议每周或每月更新一次',
+    negative: false,
+  },
+  {
+    label: '总支出',
+    value: formatCurrency(totalExpense.value),
+    hint: `来自支出记录 ${store.expenses.length} 条`,
+    negative: false,
+  },
+  {
+    label: '利润',
+    value: formatProfit(profit.value),
+    hint: isLoss.value ? `还差 ${formatCurrency(Math.abs(profit.value))} 才回本` : '总收入 − 总支出',
+    negative: isLoss.value,
+  },
+]);
+
+const onlineIncomeUpdatedText = computed(() =>
+  store.onlineIncomeUpdatedAt
+    ? dayjs(store.onlineIncomeUpdatedAt).format('YYYY-MM-DD HH:mm')
+    : '还没有保存过',
+);
+
+watch(
+  () => store.onlineIncome,
+  (value) => {
+    onlineIncomeDraft.value = Number(value) || 0;
+  },
+  { immediate: true },
+);
 
 function formatMarketDate(date: string) {
   const parsed = dayjs(date);
@@ -94,10 +136,10 @@ async function handleDeleteMarket(id: number) {
       type: 'warning',
     });
     await store.deleteMarket(id);
-    ElMessage.success('集市记录已删除');
+    ElMessage.success('集市收入已删除');
   } catch (error) {
     if (error === 'cancel' || error === 'close') return;
-    ElMessage.error(error instanceof Error ? error.message : '删除集市记录失败');
+    ElMessage.error(error instanceof Error ? error.message : '删除集市收入失败');
   }
 }
 
@@ -137,16 +179,36 @@ async function submitMarket() {
   try {
     if (editingId.value) {
       await store.updateMarket(editingId.value, payload);
-      ElMessage.success('集市记录已更新');
+      ElMessage.success('集市收入已更新');
     } else {
       await store.addMarket(payload);
-      ElMessage.success('集市记录已保存');
+      ElMessage.success('集市收入已保存');
     }
 
     dialogVisible.value = false;
     resetForm();
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '集市记录保存失败');
+    ElMessage.error(error instanceof Error ? error.message : '集市收入保存失败');
+  }
+}
+
+async function handleSaveOnlineIncome() {
+  const value = Number(onlineIncomeDraft.value);
+
+  if (!Number.isFinite(value) || value < 0) {
+    ElMessage.error('线上收入需为不小于 0 的数字');
+    return;
+  }
+
+  savingOnlineIncome.value = true;
+
+  try {
+    await store.saveOnlineIncome(value);
+    ElMessage.success('线上收入已更新');
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '线上收入保存失败');
+  } finally {
+    savingOnlineIncome.value = false;
   }
 }
 
@@ -166,28 +228,69 @@ onUnmounted(() => {
   <div class="page-stack">
     <section class="page-hero page-hero--warm">
       <div>
-        <div class="hero-kicker">集市记录 · 线下出摊台账</div>
-        <h2 class="hero-title">每一场集市的时间、地点和收入都留在这里</h2>
-        <p class="hero-description">出摊结束后顺手记一笔，回头就能看出哪类市集更值得去、一个月摆摊能赚多少。</p>
+        <div class="hero-kicker">收入记录 · 线下集市 + 线上收入</div>
+        <h2 class="hero-title">集市按场记、线上定期更新，收入支出一起算清楚</h2>
+        <p class="hero-description">
+          每次出摊结束后记一笔集市收入，线上收入按平台实际到账金额手工更新；页面会自动减去支出记录里的金额，算出当前利润。
+        </p>
       </div>
       <div class="hero-badges">
-        <span class="hero-badge">累计 {{ store.markets.length }} 场</span>
         <span class="hero-badge">总收入 {{ formatCurrency(totalIncome) }}</span>
+        <span class="hero-badge" :class="{ 'hero-badge--danger': isLoss }">
+          利润 {{ formatProfit(profit) }}
+        </span>
       </div>
     </section>
 
     <div class="summary-grid">
-      <div v-for="item in summaryCards" :key="item.label" class="summary-tile">
+      <div
+        v-for="item in summaryCards"
+        :key="item.label"
+        class="summary-tile"
+        :class="{ 'summary-tile--negative': item.negative }"
+      >
         <strong>{{ item.label }}</strong>
         <span>{{ item.value }}</span>
+        <small class="summary-hint">{{ item.hint }}</small>
       </div>
     </div>
+
+    <div v-if="isLoss" class="profit-warning">
+      <strong>利润为负</strong>
+      <span>
+        当前总支出比总收入多 {{ formatCurrency(Math.abs(profit)) }}，请检查支出记录，或补录还没记的集市 / 线上收入。
+      </span>
+    </div>
+
+    <el-card class="section-card">
+      <div class="toolbar">
+        <div>
+          <h2>线上收入</h2>
+          <div class="inline-tip">平台后台的实际到账金额，建议每周或每月手工更新一次，不用逐单记录</div>
+        </div>
+        <div class="online-actions">
+          <el-input-number
+            v-model="onlineIncomeDraft"
+            class="online-input"
+            :min="0"
+            :step="100"
+            :precision="2"
+          />
+          <el-button type="primary" :loading="savingOnlineIncome" @click="handleSaveOnlineIncome">
+            保存
+          </el-button>
+        </div>
+      </div>
+      <div class="inline-tip">上次更新：{{ onlineIncomeUpdatedText }}</div>
+    </el-card>
 
     <el-card class="section-card soft-table">
       <div class="toolbar">
         <div>
-          <h2>集市记录</h2>
-          <div class="inline-tip">只统计线下出摊收入，不计入线上订单的销售额与利润</div>
+          <h2>集市收入台账</h2>
+          <div class="inline-tip">
+            共 {{ store.markets.length }} 场 · 累计 {{ formatCurrency(marketIncomeTotal) }}；线下出摊按场记录
+          </div>
         </div>
         <div class="market-toolbar-actions">
           <el-input
@@ -204,7 +307,7 @@ onUnmounted(() => {
       <div class="table-scroll">
         <el-table
           :data="filteredMarkets"
-          :empty-text="keyword ? '没有匹配的集市记录，换个关键词试试。' : '还没有集市记录，先记下第一场集市吧。'"
+          :empty-text="keyword ? '没有匹配的集市记录，换个关键词试试。' : '还没有集市收入，先记下第一场集市吧。'"
         >
           <el-table-column prop="name" label="集市名称" min-width="160" />
           <el-table-column label="日期" width="160">
@@ -231,7 +334,7 @@ onUnmounted(() => {
 
     <el-dialog
       v-model="dialogVisible"
-      :title="editingId ? '编辑集市记录' : '新增集市记录'"
+      :title="editingId ? '编辑集市收入' : '新增集市收入'"
       :fullscreen="isMobile"
       width="640px"
       class="mobile-form-dialog"
@@ -282,6 +385,59 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.summary-hint {
+  display: block;
+  margin-top: 6px;
+  color: #8a93a8;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.summary-tile--negative {
+  border-color: rgba(229, 72, 77, 0.32);
+  background: #fff7f7;
+}
+
+.summary-tile--negative span {
+  color: #d92d36;
+}
+
+.summary-tile--negative .summary-hint {
+  color: #c1656a;
+}
+
+.hero-badge--danger {
+  background: rgba(229, 72, 77, 0.14);
+  color: #b42318;
+}
+
+.profit-warning {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  padding: 14px 18px;
+  border-radius: 16px;
+  border: 1px solid rgba(229, 72, 77, 0.3);
+  background: #fff1f1;
+  color: #b42318;
+  font-size: 13px;
+}
+
+.profit-warning strong {
+  font-size: 14px;
+}
+
+.online-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.online-input {
+  width: 220px;
+}
+
 .market-toolbar-actions {
   display: flex;
   align-items: center;
@@ -297,6 +453,16 @@ onUnmounted(() => {
 }
 
 @media (max-width: 768px) {
+  .online-actions {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .online-input {
+    width: 100%;
+  }
+
   .market-toolbar-actions {
     flex-direction: column;
     align-items: stretch;

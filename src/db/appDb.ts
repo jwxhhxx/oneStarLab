@@ -1,6 +1,6 @@
 import Dexie, { type Table } from 'dexie';
 
-import type { DrawingInspirationRecord, ExpenseRecord, LabInspiration, LabProject, MarketRecord, Order, Product, PricingRule, InventoryTransaction } from '@/types';
+import type { AppSetting, DrawingInspirationRecord, ExpenseRecord, LabInspiration, LabProject, MarketRecord, Order, Product, PricingRule, InventoryTransaction } from '@/types';
 
 class OneStarLabDb extends Dexie {
   products!: Table<Product, number>;
@@ -13,6 +13,7 @@ class OneStarLabDb extends Dexie {
   expenses!: Table<ExpenseRecord, number>;
   inventoryTransactions!: Table<InventoryTransaction, number>;
   markets!: Table<MarketRecord, number>;
+  settings!: Table<AppSetting, string>;
 
   constructor() {
     super('oneStarLabDb');
@@ -84,6 +85,20 @@ class OneStarLabDb extends Dexie {
       inventoryTransactions: '++id,productId,barcode,type,createdAt',
       categories: '++id,name,createdAt',
       markets: '++id,name,date,location,createdAt',
+    });
+
+    this.version(8).stores({
+      products: '++id,sku,category,name,stock,createdAt',
+      orders: '++id,orderNo,channel,createdAt,status',
+      pricingRules: '++id',
+      labInspirations: '++id,status,tag,updatedAt',
+      labProjects: '++id,stage,launchDate,updatedAt',
+      drawingInspirations: '++id,createdAt,completed',
+      expenses: '++id,createdAt,purpose',
+      inventoryTransactions: '++id,productId,barcode,type,createdAt',
+      categories: '++id,name,createdAt',
+      markets: '++id,name,date,location,createdAt',
+      settings: 'key',
     });
   }
 }

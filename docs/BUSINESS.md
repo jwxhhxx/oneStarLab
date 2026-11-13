@@ -20,6 +20,7 @@ OneStarLab 是一个纯前端的经营后台，所有数据保存在浏览器的
 - `drawingInspirations`：灵感生成结果记录。
 - `expenses`：开店支出记录。
 - `markets`：集市出摊记录（名称、日期、地点、每场收入）。
+- `settings`：键值配置表，当前保存线上收入（`onlineIncome`）与最后更新时间。
 - `inventoryTransactions`：入/出库事务日志（扫码/手动/订单触发）。
 
 ## 页面与业务流说明
@@ -47,10 +48,13 @@ OneStarLab 是一个纯前端的经营后台，所有数据保存在浏览器的
 ### 支出记录（Expenses）
 - 向 `expenses` 写入时会记录 `purpose`、`amount`、`createdAt`，并在看板上汇总为成本统计。
 
-### 集市记录（Markets）
-- 每场集市写入 `markets`，记录 `name`、`date`（YYYY-MM-DD）、`location`、`income`，可选 `note` 与系统写入的 `createdAt`。
-- 页面按日期倒序展示，并汇总累计场次、累计收入、本月收入与场均收入；支持按集市名称或地点搜索。
-- 集市收入只统计线下出摊所得，不并入 `orders` 的销售额与净利润，避免与线上订单重复计算。
+### 收入记录（Income）
+- 页面路径 `/income`（旧 `/markets` 会重定向过来），把线下集市收入与线上收入放在一起看。
+- 集市部分：每场集市写入 `markets`，记录 `name`、`date`（YYYY-MM-DD）、`location`、`income`，可选 `note` 与系统写入的 `createdAt`；按日期倒序展示，支持按集市名称或地点搜索。
+- 线上收入：不逐单记录，由店主在页面顶部输入框里按平台实际到账金额手工填写，点击保存后写入 `settings` 的 `onlineIncome` 键，并记录 `updatedAt` 作为“上次更新”时间；建议每周或每月更新一次。
+- 汇总口径：总收入 = 集市累计收入 + 线上收入；总支出 = `expenses` 中所有 `amount` 之和；利润 = 总收入 − 总支出。
+- 展示规则：页面顶部汇总卡片显示总收入、线上收入、总支出与利润；利润为负时利润数字、顶部徽章变红，并出现一条红色提醒，提示支出比收入多多少、需要补录或检查支出。
+- 集市收入与手工线上收入都只用于收入页的台账与利润展示，不并入 `orders` 的销售额与净利润，避免和线上订单重复计算。
 
 ### 数据中心（导出/导入）
 - 使用 `dexie-export-import` 的 `exportDB` / `importDB` 实现全库导出与导入。

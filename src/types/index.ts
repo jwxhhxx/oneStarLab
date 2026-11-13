@@ -183,6 +183,12 @@ export interface MarketInput {
   note?: string;
 }
 
+export interface AppSetting {
+  key: string;
+  value: string;
+  updatedAt: string;
+}
+
 export interface InventoryTransaction {
   id?: number;
   productId: number;

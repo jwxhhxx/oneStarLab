@@ -22,10 +22,14 @@ const router = createRouter({
       meta: { title: '订单中心' },
     },
     {
+      path: '/income',
+      name: 'income',
+      component: () => import('@/views/IncomeView.vue'),
+      meta: { title: '收入记录' },
+    },
+    {
       path: '/markets',
-      name: 'markets',
-      component: () => import('@/views/MarketsView.vue'),
-      meta: { title: '集市记录' },
+      redirect: '/income',
     },
     {
       path: '/pricing',
