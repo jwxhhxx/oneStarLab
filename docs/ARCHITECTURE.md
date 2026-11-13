@@ -32,7 +32,7 @@ View -> Store -> Dexie Table
 
 职责：
 
-- 管理 products、orders、expenses、pricingRule、labInspirations、labProjects。
+- 管理 products、orders、expenses、markets、pricingRule、labInspirations、labProjects。
 - 提供 CRUD action 与业务流程（例如下单扣减库存）。
 - 通过 loadAll 统一刷新状态，确保 UI 与数据库一致。
 
@@ -53,7 +53,7 @@ View -> Store -> Dexie Table
 版本策略：
 
 - 变更 schema 时必须增加 version。
-- 为常用查询字段建立索引（例如 createdAt、status、tag、purpose）。
+- 为常用查询字段建立索引（例如 createdAt、status、tag、purpose、date、location）。
 
 ### 类型层
 
@@ -61,7 +61,7 @@ View -> Store -> Dexie Table
 
 职责：
 
-- 统一管理 Product、Order、PricingRule、LabProject 等业务模型。
+- 统一管理 Product、Order、PricingRule、LabProject、MarketRecord 等业务模型。
 - 作为 Store、View、DB 的共同契约。
 
 建议：

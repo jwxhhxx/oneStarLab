@@ -14,6 +14,8 @@ import type {
   LabProject,
   LabProjectInput,
   LabStage,
+  MarketInput,
+  MarketRecord,
   NewOrderInput,
   Order,
   PricingRule,
@@ -44,6 +46,7 @@ export const useShopStore = defineStore('shop', () => {
   const drawingInspirations = ref<DrawingInspirationRecord[]>([]);
   const expenses = ref<ExpenseRecord[]>([]);
   const inventoryTransactions = ref<InventoryTransaction[]>([]);
+  const markets = ref<MarketRecord[]>([]);
   const MAX_CATEGORY_NAME_LENGTH = 10;
 
   async function loadAll() {
@@ -56,6 +59,7 @@ export const useShopStore = defineStore('shop', () => {
     drawingInspirations.value = await db.drawingInspirations.orderBy('createdAt').reverse().toArray();
     expenses.value = await db.expenses.orderBy('createdAt').reverse().toArray();
     inventoryTransactions.value = await db.inventoryTransactions.orderBy('createdAt').reverse().toArray();
+    markets.value = await db.markets.orderBy('date').reverse().toArray();
   }
 
   async function initialize() {
@@ -797,6 +801,28 @@ export const useShopStore = defineStore('shop', () => {
     await loadAll();
   }
 
+  async function addMarket(input: MarketInput) {
+    await db.markets.add({
+      ...input,
+      income: Number(input.income),
+      createdAt: new Date().toISOString(),
+    });
+    await loadAll();
+  }
+
+  async function updateMarket(id: number, input: MarketInput) {
+    await db.markets.update(id, {
+      ...input,
+      income: Number(input.income),
+    });
+    await loadAll();
+  }
+
+  async function deleteMarket(id: number) {
+    await db.markets.delete(id);
+    await loadAll();
+  }
+
   return {
     loading,
     initialized,
@@ -808,6 +834,7 @@ export const useShopStore = defineStore('shop', () => {
     drawingInspirations,
     expenses,
     inventoryTransactions,
+    markets,
     stats,
     lowStockProducts,
     recentOrders,
@@ -842,6 +869,9 @@ export const useShopStore = defineStore('shop', () => {
     deleteInventoryTransaction,
     updateExpense,
     deleteExpense,
+    addMarket,
+    updateMarket,
+    deleteMarket,
     getSuggestedPrice,
     getMinPrice,
     getCategoryUsageCounts,

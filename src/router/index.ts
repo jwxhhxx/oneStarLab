@@ -22,6 +22,12 @@ const router = createRouter({
       meta: { title: '订单中心' },
     },
     {
+      path: '/markets',
+      name: 'markets',
+      component: () => import('@/views/MarketsView.vue'),
+      meta: { title: '集市记录' },
+    },
+    {
       path: '/pricing',
       name: 'pricing',
       component: () => import('@/views/PricingView.vue'),

@@ -165,6 +165,24 @@ export interface ExpenseInput {
   amount: number;
 }
 
+export interface MarketRecord {
+  id?: number;
+  name: string;
+  date: string;
+  location: string;
+  income: number;
+  note?: string;
+  createdAt: string;
+}
+
+export interface MarketInput {
+  name: string;
+  date: string;
+  location: string;
+  income: number;
+  note?: string;
+}
+
 export interface InventoryTransaction {
   id?: number;
   productId: number;

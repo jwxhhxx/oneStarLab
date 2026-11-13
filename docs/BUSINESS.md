@@ -19,6 +19,7 @@ OneStarLab 是一个纯前端的经营后台，所有数据保存在浏览器的
 - `labInspirations` / `labProjects`：研发/上新流程数据。
 - `drawingInspirations`：灵感生成结果记录。
 - `expenses`：开店支出记录。
+- `markets`：集市出摊记录（名称、日期、地点、每场收入）。
 - `inventoryTransactions`：入/出库事务日志（扫码/手动/订单触发）。
 
 ## 页面与业务流说明
@@ -46,12 +47,17 @@ OneStarLab 是一个纯前端的经营后台，所有数据保存在浏览器的
 ### 支出记录（Expenses）
 - 向 `expenses` 写入时会记录 `purpose`、`amount`、`createdAt`，并在看板上汇总为成本统计。
 
+### 集市记录（Markets）
+- 每场集市写入 `markets`，记录 `name`、`date`（YYYY-MM-DD）、`location`、`income`，可选 `note` 与系统写入的 `createdAt`。
+- 页面按日期倒序展示，并汇总累计场次、累计收入、本月收入与场均收入；支持按集市名称或地点搜索。
+- 集市收入只统计线下出摊所得，不并入 `orders` 的销售额与净利润，避免与线上订单重复计算。
+
 ### 数据中心（导出/导入）
 - 使用 `dexie-export-import` 的 `exportDB` / `importDB` 实现全库导出与导入。
 - 导入会清除并重建表，请先在本地导出备份文件再进行导入操作；导出文件名默认含日期时间便于区分（示例：`onestarlab-backup-YYYY-MM-DD-HHmm.json`）。
 
 ### 条形码生成与扫码（Barcode / Scan）
-- `BarcodeView`：使用 `JsBarcode` 生成 SVG 条码，支持将 SVG 转为 PNG 并通过 Web Share 或在新窗口打开以便手机保存；提供标签打印的简易 HTML 模板（打印时需根据标签机纸张调整尺寸）。
+- 商品中心内置的条码弹窗：使用 `JsBarcode` 生成 SVG 条码，支持将 SVG 转为 PNG 并通过 Web Share 或在新窗口打开以便手机保存；提供标签打印的简易 HTML 模板（打印时需根据标签机纸张调整尺寸）。
 - `BarcodeScanView`：使用 `@zxing/library` 打开相机（优先后置摄像头），扫码结果可自动加入扫描队列（去抖与同 SKU 合并）。
 - 批量扫码后点击“生成订单”会调用 store 的 `createOrderFromScans`：在单个 Dexie 事务内完成订单创建、库存更新与写入 `inventoryTransactions`，保证原子性。
 - 单次扫码也可以调用 `processInventoryTransaction` 执行单条入/出库；若为出库，系统会在事务中自动生成对应订单（单笔）。
