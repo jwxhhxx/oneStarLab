@@ -76,8 +76,8 @@ const todayText = computed(() =>
       </el-menu>
 
       <div class="sidebar-footer">
-        <div class="sidebar-pill">本地离线模式</div>
-        <p>数据仅保存在当前浏览器，建议定期导出备份。</p>
+        <div class="sidebar-pill">服务端存储</div>
+        <p>数据保存在服务端 SQLite，建议定期导出备份。</p>
       </div>
     </el-aside>
 
@@ -103,8 +103,8 @@ const todayText = computed(() =>
         </div>
 
         <div class="header-actions">
-          <el-tag round effect="dark" type="primary">纯前端运行</el-tag>
-          <el-tag round type="success">IndexedDB 已启用</el-tag>
+          <el-tag round effect="dark" type="primary">服务端运行</el-tag>
+          <el-tag round type="success">SQLite 已连接</el-tag>
         </div>
       </el-header>
 

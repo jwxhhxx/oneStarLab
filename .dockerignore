@@ -1,0 +1,11 @@
+node_modules
+dist
+data
+backend/data
+.git
+.github
+*.log
+build.log
+.e2e-refactor.mjs
+.api-smoke.mjs
+*.exe

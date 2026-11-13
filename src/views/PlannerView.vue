@@ -655,7 +655,7 @@ onUnmounted(() => {
           <template #header>
             <div class="panel-head">
               <span class="panel-title">我的模板</span>
-              <span class="muted">本地保存</span>
+              <span class="muted">保存到服务端</span>
             </div>
           </template>
 
@@ -672,7 +672,7 @@ onUnmounted(() => {
             <el-button text @click="resetPlanner">重置</el-button>
           </div>
 
-          <p class="inline-tip">模板存在浏览器本地（IndexedDB），清理浏览器数据或换设备后会丢失。</p>
+          <p class="inline-tip">模板保存在服务端数据库，换设备访问同一服务也能看到。</p>
         </el-card>
       </div>
 

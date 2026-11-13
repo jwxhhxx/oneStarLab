@@ -2,7 +2,7 @@ import dayjs from 'dayjs';
 import { computed, ref } from 'vue';
 import { acceptHMRUpdate, defineStore } from 'pinia';
 
-import { db, defaultPricingRule } from '@/db/appDb';
+import { api } from '@/api/client';
 import type {
   DrawingInspirationRecord,
   ExpenseInput,
@@ -27,14 +27,15 @@ import type {
 } from '@/types';
 import { calculateMinPrice, calculateSuggestedPrice } from '@/utils/pricing';
 
-const stageProgressMap: Record<LabStage, number> = {
-  灵感整理: 10,
-  设计中: 35,
-  打样中: 60,
-  排产中: 82,
-  待上新: 95,
-  已上新: 100,
+const defaultPricingRule: PricingRule = {
+  id: 1,
+  targetMargin: 0.45,
+  channelFeeRate: 0.05,
+  extraCost: 1.2,
+  roundingMode: 'x.9',
 };
+
+const MAX_CATEGORY_NAME_LENGTH = 10;
 
 export const useShopStore = defineStore('shop', () => {
   const loading = ref(false);
@@ -52,24 +53,22 @@ export const useShopStore = defineStore('shop', () => {
   const onlineIncome = ref(0);
   const onlineIncomeUpdatedAt = ref('');
   const plannerTemplates = ref<PlannerTemplate[]>([]);
-  const MAX_CATEGORY_NAME_LENGTH = 10;
 
   async function loadAll() {
-    products.value = await db.products.orderBy('createdAt').reverse().toArray();
-    categories.value = await db.categories.orderBy('name').toArray();
-    orders.value = await db.orders.orderBy('createdAt').reverse().toArray();
-    pricingRule.value = (await db.pricingRules.get(1)) ?? { ...defaultPricingRule };
-    labInspirations.value = await db.labInspirations.orderBy('updatedAt').reverse().toArray();
-    labProjects.value = await db.labProjects.orderBy('updatedAt').reverse().toArray();
-    drawingInspirations.value = await db.drawingInspirations.orderBy('createdAt').reverse().toArray();
-    expenses.value = await db.expenses.orderBy('createdAt').reverse().toArray();
-    inventoryTransactions.value = await db.inventoryTransactions.orderBy('createdAt').reverse().toArray();
-    markets.value = await db.markets.orderBy('date').reverse().toArray();
-    plannerTemplates.value = await db.plannerTemplates.orderBy('updatedAt').reverse().toArray();
-
-    const onlineIncomeSetting = await db.settings.get('onlineIncome');
-    onlineIncome.value = onlineIncomeSetting ? Number(onlineIncomeSetting.value) || 0 : 0;
-    onlineIncomeUpdatedAt.value = onlineIncomeSetting?.updatedAt ?? '';
+    const data = await api.bootstrap();
+    products.value = data.products;
+    categories.value = data.categories;
+    orders.value = data.orders;
+    pricingRule.value = data.pricingRule;
+    labInspirations.value = data.labInspirations;
+    labProjects.value = data.labProjects;
+    drawingInspirations.value = data.drawingInspirations;
+    expenses.value = data.expenses;
+    inventoryTransactions.value = data.inventoryTransactions;
+    markets.value = data.markets;
+    onlineIncome.value = data.onlineIncome;
+    onlineIncomeUpdatedAt.value = data.onlineIncomeUpdatedAt;
+    plannerTemplates.value = data.plannerTemplates;
   }
 
   async function initialize() {
@@ -77,15 +76,6 @@ export const useShopStore = defineStore('shop', () => {
 
     loading.value = true;
     try {
-      const rule = await db.pricingRules.get(1);
-
-      if (!rule) {
-        await db.pricingRules.put({ ...defaultPricingRule });
-      }
-
-      // Ensure categories table has sensible defaults and any existing product categories
-      await ensureCategoriesSeeded();
-
       await loadAll();
       initialized.value = true;
     } finally {
@@ -93,195 +83,54 @@ export const useShopStore = defineStore('shop', () => {
     }
   }
 
-  async function ensureCategoriesSeeded() {
-    // ensure there is always a stable "未分类" category with id = 0
-    const defaultCats = ['胶带', '贴纸', '便签', '套装'];
-
-    const existing = await db.categories.toArray();
-    const existingNames = new Set(existing.map((c) => c.name));
-
-    // create explicit "未分类" with id 0 when missing
-    if (!existingNames.has('未分类')) {
-      try {
-        // explicit put with id 0 — Dexie allows specifying a key even when ++id is declared
-        await db.categories.put({ id: 0, name: '未分类', createdAt: new Date().toISOString() });
-        existingNames.add('未分类');
-      } catch (e) {
-        // ignore failures: fall back to normal add below
-      }
-    }
-
-    const toAddSet = new Set<string>();
-
-    // always ensure other defaults exist
-    for (const d of defaultCats) {
-      if (!existingNames.has(d)) toAddSet.add(d);
-    }
-
-    // if there are no categories stored, extract from products for compatibility
-    if (existing.length === 0) {
-      const prods = await db.products.toArray();
-      for (const p of prods) {
-        if (p.category && p.category.trim() && !existingNames.has(p.category.trim())) {
-          toAddSet.add(p.category.trim());
-        }
-      }
-    }
-
-    if (toAddSet.size > 0) {
-      await db.transaction('rw', db.categories, async () => {
-        for (const name of toAddSet) {
-          await db.categories.add({ name, createdAt: new Date().toISOString() });
-        }
-      });
-    }
-  }
-
-  async function addProduct(input: ProductInput) {
-    // ensure category exists first
-    const nm = (input.category || '').trim();
-    if (nm) {
-      await addCategory(nm);
-    }
-
-    // auto-generate SKU when not provided — use minimal-gap filling strategy
-    if (!(input.sku || '').trim()) {
-      input.sku = await generateSkuForCategory(nm, undefined);
-    }
-
-    const suggested = calculateSuggestedPrice(input.purchaseCost, input.packagingCost, pricingRule.value);
-
-    await db.products.add({
-      ...input,
-      salePrice: input.salePrice > 0 ? input.salePrice : suggested,
-      createdAt: new Date().toISOString(),
-    });
-
-    await loadAll();
-  }
-
-  async function updateProduct(id: number, input: ProductInput) {
-    // ensure category exists
-    if (input.category && input.category.trim()) {
-      await addCategory(input.category.trim());
-    }
-    const suggested = calculateSuggestedPrice(input.purchaseCost, input.packagingCost, pricingRule.value);
-
-    await db.products.update(id, {
-      ...input,
-      salePrice: input.salePrice > 0 ? input.salePrice : suggested,
-    });
-
-    await loadAll();
-  }
-
-  async function deleteProduct(id: number) {
-    await db.products.delete(id);
-    await loadAll();
-  }
-
   async function addCategory(name: string) {
     let nm = (name || '').trim();
     if (!nm) return;
     if (nm.length > MAX_CATEGORY_NAME_LENGTH) {
-      // Truncate long category names at store level as a safety net
       nm = nm.slice(0, MAX_CATEGORY_NAME_LENGTH);
     }
-    const exists = await db.categories.where('name').equals(nm).first();
-    if (!exists) {
-      await db.categories.add({ name: nm, createdAt: new Date().toISOString() });
-      await loadAll();
-    }
+    if (categories.value.some((item) => item.name === nm)) return;
+    await api.categories.create(nm);
+    categories.value = [...categories.value, { id: Date.now(), name: nm, createdAt: new Date().toISOString() }];
   }
 
-  async function generateSkuForCategory(categoryName: string, excludeProductId?: number, createIfMissing = true) {
-    const nm = (categoryName || '').trim();
-    // ensure category exists (only create if requested)
-    let cat = null as (import('@/types').Category | undefined) | null;
+  async function addProduct(input: ProductInput) {
+    const nm = (input.category || '').trim();
     if (nm) {
-      cat = await db.categories.where('name').equals(nm).first();
-      if (!cat && createIfMissing) {
-        await db.categories.add({ name: nm, createdAt: new Date().toISOString() });
-        cat = await db.categories.where('name').equals(nm).first();
-      }
+      await addCategory(nm);
     }
+    await api.products.create({ ...input, category: nm });
+    await loadAll();
+  }
 
-    const categoryId = (cat && cat.id) ? cat.id : 0;
-
-    // collect used sequence numbers for this category (matching `${categoryId}-NNNN`)
-    const prods = nm ? await db.products.where('category').equals(nm).toArray() : await db.products.toArray();
-    const used = new Set<number>();
-    const re = new RegExp(`^${categoryId}-(\\d+)$`);
-    for (const p of prods) {
-      if (!p.sku) continue;
-      const m = p.sku.match(re);
-      if (m) {
-        const n = parseInt(m[1], 10);
-        if (!Number.isNaN(n) && n > 0) {
-          // when calibrating an existing product, exclude its own current SKU
-          if (excludeProductId && p.id === excludeProductId) continue;
-          used.add(n);
-        }
-      }
+  async function updateProduct(id: number, input: ProductInput) {
+    if (input.category && input.category.trim()) {
+      await addCategory(input.category.trim());
     }
+    await api.products.update(id, input);
+    await loadAll();
+  }
 
-    // find smallest missing positive integer starting from 1
-    let seq = 1;
-    while (used.has(seq)) seq += 1;
+  async function deleteProduct(id: number) {
+    await api.products.remove(id);
+    await loadAll();
+  }
 
-    let candidate = `${categoryId}-${String(seq).padStart(4, '0')}`;
-
-    // extra safety: ensure global uniqueness (skip excluded product id)
-    // if collision happens (e.g., another product outside this category holds the SKU), increment until unique
-    // eslint-disable-next-line no-constant-condition
-    while (true) {
-      const existing = await db.products.where('sku').equals(candidate).first();
-      if (!existing) break;
-      if (excludeProductId && existing.id === excludeProductId) break;
-      seq += 1;
-      candidate = `${categoryId}-${String(seq).padStart(4, '0')}`;
-    }
-
-    return candidate;
+  async function generateSkuForCategory(
+    categoryName: string,
+    excludeProductId?: number,
+    createIfMissing = true,
+  ) {
+    const result = await api.products.suggestSku(
+      (categoryName || '').trim(),
+      excludeProductId,
+      createIfMissing,
+    );
+    return result.sku;
   }
 
   async function deleteCategory(id: number, reassignToName?: string | null) {
-    const cat = await db.categories.get(id);
-    if (!cat) return;
-
-    // protect the default fallback category
-    if (cat.name === '未分类' || id === 0) {
-      throw new Error('默认分类 “未分类” 不可删除');
-    }
-
-    // find products using this category
-    const productsUsing = await db.products.where('category').equals(cat.name).toArray();
-
-    await db.transaction('rw', db.products, db.categories, async () => {
-      if (productsUsing.length > 0) {
-        if (reassignToName && reassignToName.trim()) {
-          // ensure target category exists
-          const targetName = reassignToName.trim();
-          const exists = await db.categories.where('name').equals(targetName).first();
-          if (!exists) {
-            await db.categories.add({ name: targetName, createdAt: new Date().toISOString() });
-          }
-
-          // update products to use the new category name
-          for (const p of productsUsing) {
-            await db.products.update(p.id!, { category: targetName });
-          }
-        } else {
-          // clear category field for affected products
-          for (const p of productsUsing) {
-            await db.products.update(p.id!, { category: '' });
-          }
-        }
-      }
-
-      await db.categories.delete(id);
-    });
-
+    await api.categories.remove(id, reassignToName ?? null);
     await loadAll();
   }
 
@@ -294,255 +143,69 @@ export const useShopStore = defineStore('shop', () => {
     return map;
   }
 
-  function buildOrderPayload(
-    product: Product,
-    input: NewOrderInput,
-    overrides: Partial<Pick<Order, 'orderNo' | 'createdAt' | 'status'>> = {},
-  ) {
-    const originalAmount = Number((product.salePrice * input.quantity).toFixed(2));
-    const totalAmount = Number(Math.max(0, originalAmount - input.discountAmount).toFixed(2));
-    const platformFee = Number((totalAmount * input.platformFeeRate).toFixed(2));
-    const goodsCost = Number(((product.purchaseCost + product.packagingCost) * input.quantity).toFixed(2));
-    const netProfit = Number((totalAmount - input.shippingCost - platformFee - goodsCost).toFixed(2));
-
-    return {
-      orderNo: overrides.orderNo ?? `ORD-${dayjs().format('YYYYMMDD-HHmmss')}`,
-      channel: input.channel,
-      customerName: input.customerName,
-      items: [
-        {
-          productId: product.id!,
-          productName: product.name,
-          sku: product.sku,
-          quantity: input.quantity,
-          salePrice: product.salePrice,
-          totalAmount,
-          totalCost: goodsCost,
-        },
-      ],
-      totalAmount,
-      discountAmount: input.discountAmount,
-      shippingCost: input.shippingCost,
-      platformFee,
-      goodsCost,
-      netProfit,
-      createdAt: overrides.createdAt ?? new Date().toISOString(),
-      status: overrides.status ?? 'paid',
-    } satisfies Omit<Order, 'id'>;
-  }
-
   async function addOrder(input: NewOrderInput) {
-    const product = await db.products.get(input.productId);
-
-    if (!product?.id) {
-      throw new Error('未找到商品');
-    }
-
-    if (product.stock < input.quantity) {
-      throw new Error('库存不足，请先补货');
-    }
-
-    const orderPayload = buildOrderPayload(product, input);
-
-    await db.transaction('rw', db.orders, db.products, async () => {
-      await db.orders.add(orderPayload);
-
-      await db.products.update(product.id!, {
-        stock: product.stock - input.quantity,
-      });
-    });
-
+    await api.orders.create(input);
     await loadAll();
   }
 
   async function updateOrder(id: number, input: NewOrderInput) {
-    const existingOrder = await db.orders.get(id);
-    if (!existingOrder) {
-      throw new Error('未找到订单');
-    }
-
-    const previousItem = existingOrder.items[0];
-    if (!previousItem) {
-      throw new Error('订单缺少商品信息');
-    }
-
-    await db.transaction('rw', db.orders, db.products, async () => {
-      const previousProduct = await db.products.get(previousItem.productId);
-      const nextProduct = await db.products.get(input.productId);
-
-      if (!nextProduct?.id) {
-        throw new Error('未找到商品');
-      }
-
-      if (previousProduct?.id && previousProduct.id !== nextProduct.id) {
-        await db.products.update(previousProduct.id, {
-          stock: previousProduct.stock + previousItem.quantity,
-        });
-      }
-
-      const availableStock = nextProduct.stock + (nextProduct.id === previousItem.productId ? previousItem.quantity : 0);
-      if (availableStock < input.quantity) {
-        throw new Error('库存不足，请先补货');
-      }
-
-      const orderPayload = buildOrderPayload(nextProduct, input, {
-        orderNo: existingOrder.orderNo,
-        createdAt: existingOrder.createdAt,
-        status: existingOrder.status,
-      });
-
-      await db.orders.update(id, orderPayload);
-      await db.products.update(nextProduct.id, {
-        stock: availableStock - input.quantity,
-      });
-    });
-
+    await api.orders.update(id, input);
     await loadAll();
   }
 
   async function deleteOrder(id: number) {
-    const existingOrder = await db.orders.get(id);
-    if (!existingOrder) {
-      throw new Error('未找到订单');
-    }
-
-    const previousItem = existingOrder.items[0];
-
-    await db.transaction('rw', db.orders, db.products, async () => {
-      if (previousItem) {
-        const product = await db.products.get(previousItem.productId);
-        if (product?.id) {
-          await db.products.update(product.id, {
-            stock: product.stock + previousItem.quantity,
-          });
-        }
-      }
-
-      await db.orders.delete(id);
-    });
-
+    await api.orders.remove(id);
     await loadAll();
   }
 
   async function savePricingRule(rule: PricingRule) {
     const payload = { ...rule, id: 1 };
-    await db.pricingRules.put(payload);
+    await api.pricing.save(payload);
     pricingRule.value = payload;
   }
 
   async function addInspiration(input: InspirationInput) {
-    const now = new Date().toISOString();
-    await db.labInspirations.add({
-      ...input,
-      createdAt: now,
-      updatedAt: now,
-    });
+    await api.lab.createInspiration(input);
     await loadAll();
   }
 
   async function updateInspiration(id: number, input: InspirationInput) {
-    await db.labInspirations.update(id, {
-      ...input,
-      updatedAt: new Date().toISOString(),
-    });
+    await api.lab.updateInspiration(id, input);
     await loadAll();
   }
 
   async function deleteInspiration(id: number) {
-    await db.labInspirations.delete(id);
+    await api.lab.removeInspiration(id);
     await loadAll();
   }
 
   async function addLabProject(input: LabProjectInput) {
-    await db.labProjects.add({
-      ...input,
-      progress: Math.max(input.progress, stageProgressMap[input.stage]),
-      sampleRecords: [],
-      updatedAt: new Date().toISOString(),
-    });
+    await api.lab.createProject(input);
     await loadAll();
   }
 
   async function updateLabProject(id: number, input: LabProjectInput) {
-    await db.labProjects.update(id, {
-      ...input,
-      progress: Math.max(input.progress, stageProgressMap[input.stage]),
-      updatedAt: new Date().toISOString(),
-    });
+    await api.lab.updateProject(id, input);
     await loadAll();
   }
 
   async function updateLabProjectStage(id: number, stage: LabStage) {
-    const project = await db.labProjects.get(id);
-    if (!project) {
-      throw new Error('未找到研发产品');
-    }
-
-    await db.labProjects.update(id, {
-      stage,
-      progress: Math.max(project.progress, stageProgressMap[stage]),
-      updatedAt: new Date().toISOString(),
-    });
+    await api.lab.updateStage(id, stage);
     await loadAll();
   }
 
   async function addProofRecord(projectId: number, input: ProofRecordInput) {
-    const project = await db.labProjects.get(projectId);
-    if (!project) {
-      throw new Error('未找到研发产品');
-    }
-
-    await db.labProjects.update(projectId, {
-      sampleRecords: [
-        ...project.sampleRecords,
-        {
-          id: `proof-${Date.now()}`,
-          ...input,
-        },
-      ],
-      updatedAt: new Date().toISOString(),
-    });
+    await api.lab.addProof(projectId, input);
     await loadAll();
   }
 
   async function deleteLabProject(id: number) {
-    await db.labProjects.delete(id);
+    await api.lab.removeProject(id);
     await loadAll();
   }
 
   async function convertLabProjectToProduct(id: number) {
-    const project = await db.labProjects.get(id);
-    if (!project) {
-      throw new Error('未找到研发产品');
-    }
-
-    const existing = await db.products.where('sku').equals(`LAB-${id}`).first();
-    if (existing) {
-      throw new Error('该研发产品已转为正式商品');
-    }
-
-    await db.transaction('rw', db.products, db.labProjects, async () => {
-      await db.products.add({
-        name: project.name,
-        sku: `LAB-${id}`,
-        category: project.category,
-        supplier: '待确认供应商',
-        purchaseCost: 0,
-        packagingCost: 0,
-        salePrice: 0,
-        stock: 0,
-        safeStock: 5,
-        note: `由研究所转入：${project.note}`,
-        createdAt: new Date().toISOString(),
-      });
-
-      await db.labProjects.update(id, {
-        stage: '已上新',
-        progress: 100,
-        updatedAt: new Date().toISOString(),
-      });
-    });
-
+    await api.lab.convert(id);
     await loadAll();
   }
 
@@ -607,34 +270,37 @@ export const useShopStore = defineStore('shop', () => {
   );
 
   async function addDrawingInspiration(record: Omit<DrawingInspirationRecord, 'id'>) {
-    await db.drawingInspirations.add(record);
+    await api.drawings.create(record);
     await loadAll();
   }
 
   async function updateDrawingInspiration(id: number, patch: Partial<DrawingInspirationRecord>) {
-    await db.drawingInspirations.update(id, patch);
+    await api.drawings.update(id, patch);
     await loadAll();
   }
 
   async function deleteDrawingInspiration(id: number) {
-    await db.drawingInspirations.delete(id);
+    await api.drawings.remove(id);
     await loadAll();
   }
 
   async function addExpense(input: ExpenseInput) {
-    await db.expenses.add({
-      ...input,
-      amount: Number(input.amount),
-      createdAt: new Date().toISOString(),
-    });
+    await api.expenses.create(input);
+    await loadAll();
+  }
+
+  async function updateExpense(id: number, input: ExpenseInput) {
+    await api.expenses.update(id, input);
+    await loadAll();
+  }
+
+  async function deleteExpense(id: number) {
+    await api.expenses.remove(id);
     await loadAll();
   }
 
   async function addInventoryTransaction(input: InventoryTransactionInput) {
-    await db.inventoryTransactions.add({
-      ...input,
-      createdAt: new Date().toISOString(),
-    });
+    await api.inventory.create(input);
     await loadAll();
   }
 
@@ -645,191 +311,45 @@ export const useShopStore = defineStore('shop', () => {
     barcode?: string,
     note?: string,
   ) {
-    const product = await db.products.get(productId);
-    if (!product || !product.id) throw new Error('未找到商品');
-
-    await db.transaction('rw', db.products, db.orders, db.inventoryTransactions, async () => {
-      const newStock = type === 'in' ? product.stock + quantity : product.stock - quantity;
-      if (type === 'out' && newStock < 0) throw new Error('库存不足');
-
-      // 如果是出库，先创建订单记录（与库存变动放在同一事务中，保持原子性）
-      if (type === 'out') {
-        const orderInput = {
-          productId,
-          customerName: note ? `扫码:${note}` : '扫码出库',
-          channel: '扫码',
-          quantity,
-          discountAmount: 0,
-          shippingCost: 0,
-          platformFeeRate: 0,
-        } as NewOrderInput;
-
-        const orderPayload = buildOrderPayload(product, orderInput);
-        await db.orders.add(orderPayload);
-      }
-
-      await db.products.update(product.id!, { stock: newStock });
-
-      await db.inventoryTransactions.add({
-        productId,
-        barcode: barcode ?? product.sku,
-        type,
-        quantity,
-        note: note ?? '',
-        createdAt: new Date().toISOString(),
-      });
-    });
-
+    await api.inventory.process({ productId, type, quantity, barcode, note });
     await loadAll();
   }
 
   async function createOrderFromScans(
-    items: Array<{ productId: number; quantity: number; barcode?: string; note?: string }> ,
+    items: Array<{ productId: number; quantity: number; barcode?: string; note?: string }>,
     type: 'in' | 'out',
     batchNote?: string,
   ) {
-    if (!items || items.length === 0) throw new Error('没有扫描到任何商品');
-
-    // 聚合同一商品
-    const agg = new Map<number, { quantity: number; barcode?: string }>();
-    for (const it of items) {
-      const cur = agg.get(it.productId);
-      if (cur) cur.quantity += it.quantity;
-      else agg.set(it.productId, { quantity: it.quantity, barcode: it.barcode });
-    }
-
-    const productIds = Array.from(agg.keys());
-
-    let newOrderNo = '';
-
-    await db.transaction('rw', db.products, db.orders, db.inventoryTransactions, async () => {
-      const productsList = await db.products.bulkGet(productIds);
-
-      // validate
-      for (const pid of productIds) {
-        const p = productsList.find((x) => x && x.id === pid);
-        if (!p) throw new Error(`未找到商品 id=${pid}`);
-      }
-
-      // check stock for out
-      if (type === 'out') {
-        for (const pid of productIds) {
-          const p = productsList.find((x) => x && x.id === pid)!;
-          const need = agg.get(pid)!.quantity;
-          if (p.stock < need) throw new Error(`商品 ${p.name} 库存不足`);
-        }
-      }
-
-      // build order items and totals
-      const orderItems = [] as Array<import('@/types').OrderItem>;
-      let totalAmount = 0;
-      let goodsCost = 0;
-
-      for (const pid of productIds) {
-        const p = productsList.find((x) => x && x.id === pid)! as Product;
-        const qty = agg.get(pid)!.quantity;
-        const itemTotal = Number((p.salePrice * qty).toFixed(2));
-        const itemCost = Number(((p.purchaseCost + p.packagingCost) * qty).toFixed(2));
-        orderItems.push({
-          productId: p.id!,
-          productName: p.name,
-          sku: p.sku,
-          quantity: qty,
-          salePrice: p.salePrice,
-          totalAmount: itemTotal,
-          totalCost: itemCost,
-        });
-        totalAmount += itemTotal;
-        goodsCost += itemCost;
-      }
-
-      const platformFee = 0;
-      const shippingCost = 0;
-      const discountAmount = 0;
-      const netProfit = Number((totalAmount - shippingCost - platformFee - goodsCost).toFixed(2));
-
-      const orderPayload = {
-        orderNo: `ORD-${dayjs().format('YYYYMMDD-HHmmss')}`,
-        channel: '扫码',
-        customerName: batchNote ? `扫码:${batchNote}` : '扫码出库批量',
-        items: orderItems,
-        totalAmount: Number(totalAmount.toFixed(2)),
-        discountAmount,
-        shippingCost,
-        platformFee,
-        goodsCost: Number(goodsCost.toFixed(2)),
-        netProfit,
-        createdAt: new Date().toISOString(),
-        status: 'paid' as const,
-      } as Omit<Order, 'id'>;
-
-      const id = await db.orders.add(orderPayload as any);
-      newOrderNo = orderPayload.orderNo;
-
-      // update stocks and add inventory transactions
-      for (const pid of productIds) {
-        const p = productsList.find((x) => x && x.id === pid)! as Product;
-        const qty = agg.get(pid)!.quantity;
-        const newStock = type === 'in' ? p.stock + qty : p.stock - qty;
-        await db.products.update(p.id!, { stock: newStock });
-
-        await db.inventoryTransactions.add({
-          productId: p.id!,
-          barcode: agg.get(pid)!.barcode ?? p.sku,
-          type,
-          quantity: qty,
-          note: batchNote ?? '',
-          createdAt: new Date().toISOString(),
-        });
-      }
-    });
-
+    const result = await api.inventory.scan({ items, type, note: batchNote });
     await loadAll();
-
-    return newOrderNo;
+    return result.orderNo;
   }
 
   async function findProductByBarcode(barcode: string) {
-    return await db.products.where('sku').equals(barcode).first();
+    try {
+      return await api.products.findByBarcode(barcode);
+    } catch {
+      return undefined;
+    }
   }
 
   async function deleteInventoryTransaction(id: number) {
-    await db.inventoryTransactions.delete(id);
-    await loadAll();
-  }
-
-  async function updateExpense(id: number, input: ExpenseInput) {
-    await db.expenses.update(id, {
-      ...input,
-      amount: Number(input.amount),
-    });
-    await loadAll();
-  }
-
-  async function deleteExpense(id: number) {
-    await db.expenses.delete(id);
+    await api.inventory.remove(id);
     await loadAll();
   }
 
   async function addMarket(input: MarketInput) {
-    await db.markets.add({
-      ...input,
-      income: Number(input.income),
-      createdAt: new Date().toISOString(),
-    });
+    await api.markets.create(input);
     await loadAll();
   }
 
   async function updateMarket(id: number, input: MarketInput) {
-    await db.markets.update(id, {
-      ...input,
-      income: Number(input.income),
-    });
+    await api.markets.update(id, input);
     await loadAll();
   }
 
   async function deleteMarket(id: number) {
-    await db.markets.delete(id);
+    await api.markets.remove(id);
     await loadAll();
   }
 
@@ -840,41 +360,21 @@ export const useShopStore = defineStore('shop', () => {
       throw new Error('线上收入需为不小于 0 的数字');
     }
 
-    await db.settings.put({
-      key: 'onlineIncome',
-      value: String(value),
-      updatedAt: new Date().toISOString(),
-    });
-    await loadAll();
+    const saved = await api.settings.saveOnlineIncome(value);
+    onlineIncome.value = saved.onlineIncome;
+    onlineIncomeUpdatedAt.value = saved.updatedAt;
   }
 
   async function savePlannerTemplate(input: PlannerTemplateInput, id?: number) {
-    const now = new Date().toISOString();
-    const payload = {
-      ...input,
-      modules: input.modules.map((module) => ({
-        ...module,
-        options: {
-          ...module.options,
-          labels: module.options.labels ? [...module.options.labels] : undefined,
-        },
-      })),
-      updatedAt: now,
-    };
-
-    if (id != null) {
-      await db.plannerTemplates.update(id, payload);
-      await loadAll();
-      return id;
-    }
-
-    const createdId = await db.plannerTemplates.add({ ...payload, createdAt: now });
+    const template = id != null
+      ? await api.planner.update(id, input)
+      : await api.planner.create(input);
     await loadAll();
-    return Number(createdId);
+    return template.id ?? id ?? 0;
   }
 
   async function deletePlannerTemplate(id: number) {
-    await db.plannerTemplates.delete(id);
+    await api.planner.remove(id);
     await loadAll();
   }
 

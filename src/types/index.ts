@@ -304,3 +304,19 @@ export interface InventoryTransactionInput {
   quantity: number;
   note?: string;
 }
+
+export interface BootstrapData {
+  products: Product[];
+  categories: Category[];
+  orders: Order[];
+  pricingRule: PricingRule;
+  labInspirations: LabInspiration[];
+  labProjects: LabProject[];
+  drawingInspirations: DrawingInspirationRecord[];
+  expenses: ExpenseRecord[];
+  inventoryTransactions: InventoryTransaction[];
+  markets: MarketRecord[];
+  onlineIncome: number;
+  onlineIncomeUpdatedAt: string;
+  plannerTemplates: PlannerTemplate[];
+}

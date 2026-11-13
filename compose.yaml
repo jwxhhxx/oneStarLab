@@ -1,0 +1,14 @@
+services:
+  onestarlab:
+    build: .
+    image: onestarlab:local
+    container_name: onestarlab
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: "8080"
+      DATABASE_PATH: /data/onestar.db
+      WEB_DIR: /app/web
+    volumes:
+      - ./data:/data
+    restart: unless-stopped

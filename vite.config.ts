@@ -2,11 +2,8 @@ import { fileURLToPath, URL } from 'node:url';
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 
-const repoName = process.env.GITHUB_REPOSITORY?.split('/')[1];
-const isGithubActions = process.env.GITHUB_ACTIONS === 'true';
-
 export default defineConfig({
-  base: isGithubActions && repoName ? `/${repoName}/` : '/',
+  base: '/',
   plugins: [vue()],
   resolve: {
     alias: {
@@ -16,5 +13,11 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     port: 5173,
+    proxy: {
+      '/api': {
+        target: process.env.VITE_PROXY_TARGET ?? 'http://127.0.0.1:8080',
+        changeOrigin: true,
+      },
+    },
   },
 });

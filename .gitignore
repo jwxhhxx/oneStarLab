@@ -8,3 +8,6 @@ Thumbs.db
 .github/skills/
 .claude/skills/
 .github/agent-handoff/*
+data/
+backend/data/
+.edge-*/

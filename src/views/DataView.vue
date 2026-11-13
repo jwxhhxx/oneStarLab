@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import { exportDB, importDB } from 'dexie-export-import';
 import { ElMessage, ElMessageBox } from 'element-plus';
 
-import { db } from '@/db/appDb';
+import { api } from '@/api/client';
 import { useShopStore } from '@/stores/useShopStore';
 
 const store = useShopStore();
@@ -15,7 +14,7 @@ const fileInputRef = ref<HTMLInputElement | null>(null);
 async function handleExport() {
   exporting.value = true;
   try {
-    const blob = await exportDB(db);
+    const blob = await api.exportSnapshot();
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     const now = new Date();
@@ -39,7 +38,7 @@ async function handleImport(e: Event) {
 
   try {
     await ElMessageBox.confirm(
-      '导入会覆盖当前所有本地数据，建议先导出备份。确认继续？',
+      '导入会覆盖服务端数据库中的全部数据，建议先导出备份。确认继续？',
       '覆盖确认',
       { type: 'warning', confirmButtonText: '确认导入', cancelButtonText: '取消' },
     );
@@ -51,9 +50,9 @@ async function handleImport(e: Event) {
 
   importing.value = true;
   try {
-    await db.delete();
-    await db.open();
-    await importDB(file);
+    const text = await file.text();
+    const snapshot = JSON.parse(text) as unknown;
+    await api.importSnapshot(snapshot);
     await store.loadAll();
     ElMessage.success('数据导入成功，页面已刷新');
   } catch (e) {
@@ -70,9 +69,9 @@ async function handleImport(e: Event) {
     <section class="page-hero">
       <div>
         <div class="hero-kicker">数据中心 · 备份与恢复</div>
-        <h2 class="hero-title">掌握你的本地数据</h2>
+        <h2 class="hero-title">掌握你的服务端数据</h2>
         <p class="hero-description">
-          所有数据仅保存在当前浏览器，建议定期导出备份，在更换设备或清理浏览器前请先导出。
+          所有数据保存在 Go 服务内置的 SQLite 数据库中，建议定期导出备份，在更换设备或重建容器前请先导出。
         </p>
       </div>
     </section>
@@ -94,7 +93,7 @@ async function handleImport(e: Event) {
         <span class="card-section-title">导入数据</span>
       </template>
       <p class="section-desc">
-        从之前导出的 JSON 备份文件中恢复数据。<strong>导入会覆盖当前所有本地数据</strong>，请谨慎操作。
+        从之前导出的 JSON 备份文件中恢复数据。<strong>导入会覆盖服务端数据库中的全部数据</strong>，请谨慎操作。
       </p>
       <el-button type="danger" :loading="importing" @click="fileInputRef?.click()">
         选择备份文件导入
@@ -108,16 +107,16 @@ async function handleImport(e: Event) {
       />
     </el-card>
 
-    <!-- 云同步（预留） -->
+    <!-- 服务端存储 -->
     <el-card class="section-card">
       <template #header>
-        <span class="card-section-title">云端同步</span>
-        <el-tag size="small" type="info" style="margin-left: 8px">即将推出</el-tag>
+        <span class="card-section-title">服务端存储</span>
+        <el-tag size="small" type="success" style="margin-left: 8px">已启用</el-tag>
       </template>
       <p class="section-desc" style="color: var(--el-text-color-secondary)">
-        多设备数据同步功能正在规划中，敬请期待。
+        数据保存在 Go 服务的 SQLite 文件中。使用 Docker 部署时把 data 目录挂载到宿主机即可持久化。
       </p>
-      <el-button disabled>连接云端</el-button>
+      <el-button disabled>由服务器统一持久化</el-button>
     </el-card>
   </div>
 </template>

@@ -2,61 +2,66 @@
 
 ## 总览
 
-OneStarLab 是单体前端 SPA，采用 Vue 3 + Pinia + Vue Router + Dexie。
+OneStarLab 采用前后端分离结构：
+
+- 前端：Vue 3 单页应用（SPA），负责界面、交互与展示状态。
+- 后端：Go HTTP 服务，提供 `/api/v1` REST API，负责全部业务规则与持久化。
+- 数据库：单个 SQLite 文件（默认 `data/onestar.db`）。
 
 核心数据流：
 
-View -> Store -> Dexie Table
+```text
+View → Pinia store → src/api/client.ts → HTTP /api/v1
+     → internal/api（路由/handler）→ internal/store（业务与事务）
+     → database/sql → SQLite
+```
 
 设计目标：
 
-- 在无后端场景下，保证店铺管理功能可本地离线运行。
-- 通过 Store 统一业务流程，避免页面直接操作数据库。
-- 将业务类型与计算逻辑集中，降低维护成本。
+- 单一二进制部署：Go 服务同时提供 API 与构建后的前端静态文件。
+- 业务规则集中在后端 store 层，页面不直接拼 SQL、不重复实现计算口径。
+- 前端保留原有组件与样式，只把数据访问从 IndexedDB 换成 REST。
+- SQLite 足够单店单机使用，备份就是一个文件。
 
 ## 分层与职责
 
-### 视图层
+### 前端视图层
 
 目录：[src/views](src/views)
 
 职责：
 
-- 展示页面与交互。
-- 表单输入校验与用户反馈。
-- 调用 Store action，不直接调用 Dexie。
+- 页面展示、表单校验、用户反馈。
+- 调用 store action，不直接发 HTTP 请求。
 
-### 状态与业务编排层
+### 前端状态与业务编排层
 
 目录：[src/stores/useShopStore.ts](src/stores/useShopStore.ts)
 
 职责：
 
-- 管理 products、orders、expenses、markets、pricingRule、labInspirations、labProjects、plannerTemplates。
-- 维护线上收入（`settings` 表中 `onlineIncome` 键）与更新时间，收入页据此计算总收入与利润。
-- 提供 CRUD action 与业务流程（例如下单扣减库存）。
-- 通过 loadAll 统一刷新状态，确保 UI 与数据库一致。
+- 维护 products、orders、expenses、markets、pricingRule、labInspirations、labProjects、plannerTemplates 等响应式状态。
+- 把页面动作翻译成 API 调用，写操作完成后调用 `loadAll()` 重新拉取 `bootstrap`。
+- 保留看板所需的计算属性（`stats`、`monthlyTrend`、`upcomingLaunches`、`lowStockProducts`）。
+- 维护线上收入与更新时间，供收入页计算总收入与利润。
 
 关键约束：
 
-- 同时修改订单与库存时，必须使用 Dexie transaction。
+- 视图层不得直接 import `src/api/client.ts` 发请求，统一走 store。
+- 金额、利润、库存等口径由后端计算；前端只做展示与轻量本地汇总。
 - 对外暴露明确错误信息，便于页面提示。
 
-### 数据访问层
+### 前端 API 客户端
 
-目录：[src/db/appDb.ts](src/db/appDb.ts)
+目录：[src/api/client.ts](src/api/client.ts)
 
 职责：
 
-- 定义 IndexedDB 数据库和版本。
-- 定义表结构与索引字段。
+- 统一 base URL（默认 `/api/v1`）、JSON 序列化、Bearer Token（可选）。
+- 把非 2xx 响应的 `{ "error": "..." }` 转成 `Error` 抛出。
+- 为每类资源提供方法：products、categories、orders、pricing、inventory、lab、drawings、expenses、markets、settings、planner、export/import。
 
-版本策略：
-
-- 变更 schema 时必须增加 version。
-- 为常用查询字段建立索引（例如 createdAt、status、tag、purpose、date、location）。
-
-### 组件层
+### 前端组件层
 
 目录：[src/components/planner](src/components/planner)、[src/components/tape](src/components/tape)
 
@@ -72,57 +77,135 @@ View -> Store -> Dexie Table
 - 纸张与模块尺寸统一使用 mm，字号用 em，避免 px 硬编码导致打印比例失真。
 - 屏幕预览与打印共用同一套组件，打印通过 `@page` 与 `@media print` 切换，不另做一套排版。
 
-### 类型层
+### 前端类型层
 
 目录：[src/types/index.ts](src/types/index.ts)
 
 职责：
 
-- 统一管理 Product、Order、PricingRule、LabProject、MarketRecord、AppSetting、PlannerTemplate、TapeDesign 等业务模型。
-- 作为 Store、View、DB 的共同契约。
+- 统一管理 Product、Order、PricingRule、LabProject、MarketRecord、AppSetting、PlannerTemplate、TapeDesign、BootstrapData 等模型。
+- 作为 Store、View、API 客户端的共同契约。
 
-建议：
-
-- 新增字段时先更新类型，再实现业务逻辑和界面。
-
-### 工具层
+### 前端工具层
 
 目录：[src/utils/pricing.ts](src/utils/pricing.ts)、[src/utils/tape.ts](src/utils/tape.ts)
 
 职责：
 
-- `pricing.ts` 存放定价相关的纯函数计算逻辑（如建议售价、最小售价）。
-- `tape.ts` 负责胶带图案绘制、毫米到像素换算、PNG/PSD 导出，视图层只传设计参数与 DPI。
-- 避免将公式或绘制细节分散在页面组件中。
+- `pricing.ts`：建议售价、最低售价与金额格式化等纯函数。
+- `tape.ts`：胶带图案绘制、毫米到像素换算、PNG/PSD 导出。
+- 公式与绘制细节不分散到页面组件中。
 
-## 路由设计
+### 后端入口层
+
+目录：[backend/cmd/server](backend/cmd/server)
+
+职责：
+
+- 读取环境变量（`PORT`、`DATABASE_PATH`、`WEB_DIR`、`API_TOKEN`、`CORS_ORIGINS`）。
+- 打开数据库、装配 `api.NewServer(...)`、启动/优雅关闭 HTTP 服务。
+
+### 后端 HTTP 层
+
+目录：[backend/internal/api](backend/internal/api)
+
+职责：
+
+- Go 1.22 ServeMux 方法路由，统一前缀 `/api/v1`。
+- CORS、可选 Bearer Token、请求日志、JSON 编解码（限制 64MB、拒绝未知字段）。
+- 错误映射：`ErrNotFound` → 404；常见业务校验错误 → 400；其余 → 500。
+- 静态资源：从 `WEB_DIR` 提供构建产物，未命中的路径回退 `index.html`。
+
+### 后端业务层
+
+目录：[backend/internal/store](backend/internal/store)
+
+职责：
+
+- 全部业务规则：定价取整、订单金额与利润、库存变更、扫码建单、研发阶段进度、SKU 生成、快照导入导出。
+- 使用 `database/sql` 与手写 SQL；多表联动放在同一事务中。
+- 对上层返回领域错误（如 `商品 %s 库存不足`、`默认分类“未分类”不可删除`）。
+
+### 后端数据层
+
+目录：[backend/internal/db](backend/internal/db)
+
+职责：
+
+- 建表与索引（`migrate`）。
+- 种子数据：默认定价规则、`未分类` 与四个默认分类（`INSERT OR IGNORE`，可重复执行）。
+
+### 后端模型层
+
+目录：[backend/internal/model](backend/internal/model)
+
+职责：
+
+- 请求/响应结构体，JSON tag 与前端类型字段一致（camelCase）。
+- `Bootstrap`（前端一次拉取的全部数据）与 `Snapshot`（导入导出格式，`version: 1`）。
+
+## 数据存储
+
+- SQLite 使用 `modernc.org/sqlite`（纯 Go，无 CGO）。
+- 连接池限制为单连接（`SetMaxOpenConns(1)`），配合 `journal_mode=WAL`、`synchronous=NORMAL`、`busy_timeout=5000`，避免并发写冲突。
+- 订单商品项、研发打样记录、内页模板模块以 JSON 文本列存储；金额用 REAL，时间用 UTC ISO 字符串（毫秒精度）。
+- 业务表共 12 张：`products`、`categories`、`orders`、`pricing_rules`、`lab_inspirations`、`lab_projects`、`drawing_inspirations`、`expenses`、`inventory_transactions`、`markets`、`settings`、`planner_templates`。
+
+### 一致性与事务
+
+- 创建/编辑/删除订单与库存回滚在同一事务内完成。
+- 批量扫码（`/inventory/scan`）在同一事务内更新库存、写流水并按扫码结果建单。
+- 导入快照时先清空全部业务表，再按原 id 写入并修正自增序列，全程单事务，失败即回滚。
+
+## API 约定
+
+- 路径前缀 `/api/v1`，全部 JSON。
+- 成功返回资源对象、数组或 `{ "ok": true }`；失败返回 `{ "error": "中文错误信息" }` 与非 2xx 状态码。
+- 列表接口不分页（单店数据量小），一次返回全量。
+- `GET /bootstrap` 一次返回首页所需全部数据，避免前端多次往返。
+- `GET /export` 返回附件 `onestarlab-backup.json`；`POST /import` 覆盖导入。
+- 设置 `API_TOKEN` 后，所有 `/api/v1` 接口（含健康检查）均需 `Authorization: Bearer <token>`。
+
+接口清单见 [docs/API.md](API.md)。
+
+## 前端路由
 
 路由定义见：[src/router/index.ts](src/router/index.ts)
 
 特性：
 
-- 页面组件采用懒加载。
-- 使用 meta.title 并在 afterEach 中统一更新 document.title。
-- 收入记录统一在 `/income` 页面（集市收入 + 线上收入 + 利润），旧的 `/markets` 保留为跳转到 `/income` 的重定向。
-- 印章相关能力统一在单一路由页面中，通过页内 Tab 切换文字印章与点阵印章。
-- 内页生成器位于 `/planner`，模板持久化在 `plannerTemplates`，打印时动态注入 `@page { size: Wmm Hmm; margin: 0 }` 以匹配所选尺寸。
-- 胶带生成位于 `/tape`，设计只存在页面状态，不写 IndexedDB；导出由 `src/utils/tape.ts` 按 DPI 生成 canvas。
+- 使用 hash 路由（`createWebHashHistory`），静态托管无需服务端 rewrite。
+- 页面组件懒加载，`meta.title` 在 `router.afterEach` 统一写入 `document.title`。
+- 收入记录统一在 `/income`（集市收入 + 线上收入 + 利润），旧 `/markets` 重定向过去。
+- 印章能力集中在单一路由，页内 Tab 切换文字与点阵印章。
+- 内页生成器位于 `/planner`，模板保存到服务端 `planner_templates`；打印时动态注入 `@page { size: Wmm Hmm; margin: 0 }`。
+- 胶带生成位于 `/tape`，设计只存在页面状态，不写数据库。
+
+## 构建与部署
+
+- 前端：`npm run build` 输出 `dist/`（含 vue-tsc 类型检查）。
+- 后端：`go build ./...`；容器内 `CGO_ENABLED=0 go build -trimpath -ldflags="-s -w"`。
+- 镜像（[Dockerfile](Dockerfile)）三阶段：Node 构建前端 → Go 编译后端 → Alpine 运行；运行阶段非 root 用户，`WEB_DIR=/app/web`，`/data` 为数据卷。
+- 编排（[compose.yaml](compose.yaml)）：单服务，`8080:8080`，`./data:/data`，内置健康检查。
+- 不再使用 GitHub Pages；GitHub Actions 只做构建与校验，不发布静态站点。
 
 ## 第三方库使用要点
 
-- ECharts：在组件卸载时释放实例，防止内存泄漏。
-- Dexie：跨表写操作使用 transaction，确保一致性。
-- Pinia：保持 action 粒度清晰，避免页面中重复业务逻辑。
-- ag-psd：只在导出 PSD 时动态 import，避免增加首屏体积；导出后按图层名组织图案。
+- ECharts：组件卸载时释放实例，防止内存泄漏。
+- Element Plus：全量引入，构建体积偏大；后续可按需引入优化。
+- ag-psd：只在导出 PSD 时动态 `import()`，不进入首屏包。
+- Pinia：action 粒度保持清晰，页面不重复业务逻辑。
 
 ## 当前架构边界
 
-- 无后端 API 与账号系统。
-- 无远程同步能力。
-- 数据生命周期依赖浏览器本地存储策略。
+- 单用户、单实例：没有账号体系与多租户；可选 `API_TOKEN` 只做简单访问保护。
+- 没有实时同步或多端推送；多设备同时操作时以最后一次写入为准。
+- 没有分页与全文搜索，适合单店数据规模。
+- 旧纯前端版本的 IndexedDB 数据不会自动迁移到 SQLite。
 
-如需演进为多端同步架构，建议优先拆分：
+后续演进方向：
 
-1. 领域模型（types）
-2. 业务服务层（store 可逐步迁移到 service）
-3. 存储适配层（Dexie / HTTP API）
+1. 账号与权限（多用户/多店）。
+2. 订单、商品的查询分页与筛选。
+3. 定时备份与远端对象存储。
+4. 需要实时协作时再引入 WebSocket/SSE 与服务端版本号。
