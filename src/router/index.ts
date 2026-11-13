@@ -73,6 +73,12 @@ const router = createRouter({
       component: () => import('@/views/HalftoneView.vue'),
       meta: { title: '印章生成' },
     },
+    {
+      path: '/planner',
+      name: 'planner',
+      component: () => import('@/views/PlannerView.vue'),
+      meta: { title: '内页生成器' },
+    },
   ],
 });
 

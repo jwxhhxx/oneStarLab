@@ -189,6 +189,69 @@ export interface AppSetting {
   updatedAt: string;
 }
 
+export type PlannerSizeKey = 'm5' | 'm25' | 'a7' | 'a6per' | 'a6' | 'a5' | 'cm5' | 'cm8' | 'trifold' | 'custom';
+
+export type PlannerModuleType =
+  | 'calendar'
+  | 'timeline'
+  | 'todo'
+  | 'quadrant'
+  | 'ledger'
+  | 'finance'
+  | 'frenchGrid'
+  | 'dailyPlan'
+  | 'meals'
+  | 'habitTracker'
+  | 'weeklyPlan'
+  | 'grid'
+  | 'dotGrid'
+  | 'lined'
+  | 'blank';
+
+export interface PlannerModuleOptions {
+  rows?: number;
+  days?: number;
+  startHour?: number;
+  endHour?: number;
+  cellMm?: number;
+  lineMm?: number;
+  labels?: string[];
+}
+
+export interface PlannerModuleConfig {
+  id: string;
+  type: PlannerModuleType;
+  title: string;
+  weight: number;
+  accent: string;
+  options: PlannerModuleOptions;
+}
+
+export interface PlannerTemplate {
+  id?: number;
+  name: string;
+  sizeKey: PlannerSizeKey;
+  widthMm: number;
+  heightMm: number;
+  paddingMm: number;
+  accent: string;
+  paper: string;
+  modules: PlannerModuleConfig[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PlannerTemplateInput {
+  name: string;
+  sizeKey: PlannerSizeKey;
+  widthMm: number;
+  heightMm: number;
+  paddingMm: number;
+  accent: string;
+  paper: string;
+  modules: PlannerModuleConfig[];
+}
+
 export interface InventoryTransaction {
   id?: number;
   productId: number;

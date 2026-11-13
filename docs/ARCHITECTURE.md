@@ -32,7 +32,7 @@ View -> Store -> Dexie Table
 
 职责：
 
-- 管理 products、orders、expenses、markets、pricingRule、labInspirations、labProjects。
+- 管理 products、orders、expenses、markets、pricingRule、labInspirations、labProjects、plannerTemplates。
 - 维护线上收入（`settings` 表中 `onlineIncome` 键）与更新时间，收入页据此计算总收入与利润。
 - 提供 CRUD action 与业务流程（例如下单扣减库存）。
 - 通过 loadAll 统一刷新状态，确保 UI 与数据库一致。
@@ -56,13 +56,28 @@ View -> Store -> Dexie Table
 - 变更 schema 时必须增加 version。
 - 为常用查询字段建立索引（例如 createdAt、status、tag、purpose、date、location）。
 
+### 组件层
+
+目录：[src/components/planner](src/components/planner)
+
+职责：
+
+- `PlannerSheet.vue` 按毫米尺寸渲染一张内页，负责留白、模块间距与 CSS 变量。
+- `PlannerBlock.vue` 负责 15 种内页模块的模板与样式。
+- 组件只接收 props 并渲染，不读写 store，也不感知打印流程。
+
+关键约束：
+
+- 纸张与模块尺寸统一使用 mm，字号用 em，避免 px 硬编码导致打印比例失真。
+- 屏幕预览与打印共用同一套组件，打印通过 `@page` 与 `@media print` 切换，不另做一套排版。
+
 ### 类型层
 
 目录：[src/types/index.ts](src/types/index.ts)
 
 职责：
 
-- 统一管理 Product、Order、PricingRule、LabProject、MarketRecord、AppSetting 等业务模型。
+- 统一管理 Product、Order、PricingRule、LabProject、MarketRecord、AppSetting、PlannerTemplate 等业务模型。
 - 作为 Store、View、DB 的共同契约。
 
 建议：
@@ -88,6 +103,7 @@ View -> Store -> Dexie Table
 - 使用 meta.title 并在 afterEach 中统一更新 document.title。
 - 收入记录统一在 `/income` 页面（集市收入 + 线上收入 + 利润），旧的 `/markets` 保留为跳转到 `/income` 的重定向。
 - 印章相关能力统一在单一路由页面中，通过页内 Tab 切换文字印章与点阵印章。
+- 内页生成器位于 `/planner`，模板持久化在 `plannerTemplates`，打印时动态注入 `@page { size: Wmm Hmm; margin: 0 }` 以匹配所选尺寸。
 
 ## 第三方库使用要点
 

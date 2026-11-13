@@ -18,6 +18,8 @@ import type {
   MarketRecord,
   NewOrderInput,
   Order,
+  PlannerTemplate,
+  PlannerTemplateInput,
   PricingRule,
   Product,
   ProductInput,
@@ -49,6 +51,7 @@ export const useShopStore = defineStore('shop', () => {
   const markets = ref<MarketRecord[]>([]);
   const onlineIncome = ref(0);
   const onlineIncomeUpdatedAt = ref('');
+  const plannerTemplates = ref<PlannerTemplate[]>([]);
   const MAX_CATEGORY_NAME_LENGTH = 10;
 
   async function loadAll() {
@@ -62,6 +65,7 @@ export const useShopStore = defineStore('shop', () => {
     expenses.value = await db.expenses.orderBy('createdAt').reverse().toArray();
     inventoryTransactions.value = await db.inventoryTransactions.orderBy('createdAt').reverse().toArray();
     markets.value = await db.markets.orderBy('date').reverse().toArray();
+    plannerTemplates.value = await db.plannerTemplates.orderBy('updatedAt').reverse().toArray();
 
     const onlineIncomeSetting = await db.settings.get('onlineIncome');
     onlineIncome.value = onlineIncomeSetting ? Number(onlineIncomeSetting.value) || 0 : 0;
@@ -844,6 +848,36 @@ export const useShopStore = defineStore('shop', () => {
     await loadAll();
   }
 
+  async function savePlannerTemplate(input: PlannerTemplateInput, id?: number) {
+    const now = new Date().toISOString();
+    const payload = {
+      ...input,
+      modules: input.modules.map((module) => ({
+        ...module,
+        options: {
+          ...module.options,
+          labels: module.options.labels ? [...module.options.labels] : undefined,
+        },
+      })),
+      updatedAt: now,
+    };
+
+    if (id != null) {
+      await db.plannerTemplates.update(id, payload);
+      await loadAll();
+      return id;
+    }
+
+    const createdId = await db.plannerTemplates.add({ ...payload, createdAt: now });
+    await loadAll();
+    return Number(createdId);
+  }
+
+  async function deletePlannerTemplate(id: number) {
+    await db.plannerTemplates.delete(id);
+    await loadAll();
+  }
+
   return {
     loading,
     initialized,
@@ -858,6 +892,7 @@ export const useShopStore = defineStore('shop', () => {
     markets,
     onlineIncome,
     onlineIncomeUpdatedAt,
+    plannerTemplates,
     stats,
     lowStockProducts,
     recentOrders,
@@ -896,6 +931,8 @@ export const useShopStore = defineStore('shop', () => {
     updateMarket,
     deleteMarket,
     saveOnlineIncome,
+    savePlannerTemplate,
+    deletePlannerTemplate,
     getSuggestedPrice,
     getMinPrice,
     getCategoryUsageCounts,

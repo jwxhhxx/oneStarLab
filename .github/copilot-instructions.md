@@ -17,6 +17,7 @@
 - Data flow should remain: View -> Pinia store actions -> Dexie tables.
 - Expense and market records are managed as separate Dexie tables; the income page (`/income`) combines market income with the manual `onlineIncome` setting and subtracts `expenses` for a display-only profit. Keep these independent from order profit calculations unless a task explicitly asks to combine them.
 - Manual online income is stored in the `settings` table under the `onlineIncome` key with an `updatedAt` timestamp; update it through the store action, not by writing Dexie from a view.
+- The planner (`/planner`) keeps saved templates in the `plannerTemplates` table and renders pages in millimetres. `src/components/planner/PlannerSheet.vue` and `PlannerBlock.vue` are shared by the on-screen preview and the print container; do not introduce a second print-only layout. Paper size is applied at print time via a dynamic `@page { size: Wmm Hmm; margin: 0 }` rule.
 
 ## Build and Test
 - Install deps: `npm install`
