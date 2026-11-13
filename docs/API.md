@@ -231,7 +231,30 @@ SKU 预生成：
 }
 ```
 
-导入会清空现有业务表后按原 id 恢复，整个过程在一个事务中，失败自动回滚。
+导入会清空现有业务表后按原 id 恢复，整个过程在一个事务中，失败自动回滚。成功返回 `{"ok": true, "source": "snapshot"}`。
+
+### 旧版浏览器备份
+
+`POST /import` 也接受旧版纯前端版本（IndexedDB / Dexie）在数据中心导出的备份文件：
+
+```json
+{
+  "formatName": "dexie",
+  "formatVersion": 1,
+  "data": {
+    "databaseName": "oneStarLabDb",
+    "databaseVersion": 9,
+    "tables": [{ "name": "products", "schema": "++id,sku", "rowCount": 2 }],
+    "data": [{ "tableName": "products", "inbound": true, "rows": [{ "id": 1, "name": "…" }] }]
+  }
+}
+```
+
+服务端按表名映射到新版结构（商品、分类、订单、定价规则、研究所、支出、库存流水、集市、线上收入、内页模板），忽略 `$types` 等 Dexie 元数据；导入成功返回 `{"ok": true, "source": "dexie"}`。
+
+- 文件无法识别时返回 `400`，例如 `{"error":"备份中没有可识别的 OneStarLab 数据表"}`。
+- 旧版备份中缺少的表按空表处理，不会报错。
+- 导入同样是覆盖式，建议先导出当前快照。
 
 ## curl 示例
 

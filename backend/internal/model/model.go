@@ -64,12 +64,12 @@ type Order struct {
 
 // NewOrderInput 新建/编辑订单入参。
 type NewOrderInput struct {
-	ProductID      int64   `json:"productId"`
-	CustomerName   string  `json:"customerName"`
-	Channel        string  `json:"channel"`
-	Quantity       int     `json:"quantity"`
-	DiscountAmount float64 `json:"discountAmount"`
-	ShippingCost   float64 `json:"shippingCost"`
+	ProductID       int64   `json:"productId"`
+	CustomerName    string  `json:"customerName"`
+	Channel         string  `json:"channel"`
+	Quantity        int     `json:"quantity"`
+	DiscountAmount  float64 `json:"discountAmount"`
+	ShippingCost    float64 `json:"shippingCost"`
 	PlatformFeeRate float64 `json:"platformFeeRate"`
 }
 
@@ -190,13 +190,13 @@ type AppSetting struct {
 }
 
 type PlannerModuleOptions struct {
-	Rows     int      `json:"rows,omitempty"`
-	Days     int      `json:"days,omitempty"`
-	StartHour int     `json:"startHour,omitempty"`
-	EndHour  int      `json:"endHour,omitempty"`
-	CellMm   float64  `json:"cellMm,omitempty"`
-	LineMm   float64  `json:"lineMm,omitempty"`
-	Labels   []string `json:"labels,omitempty"`
+	Rows      int      `json:"rows,omitempty"`
+	Days      int      `json:"days,omitempty"`
+	StartHour int      `json:"startHour,omitempty"`
+	EndHour   int      `json:"endHour,omitempty"`
+	CellMm    float64  `json:"cellMm,omitempty"`
+	LineMm    float64  `json:"lineMm,omitempty"`
+	Labels    []string `json:"labels,omitempty"`
 }
 
 type PlannerModuleConfig struct {
@@ -273,42 +273,42 @@ type ScanBatchInput struct {
 }
 
 type SKURequest struct {
-	Category        string `json:"category"`
-	ExcludeProductID int64 `json:"excludeProductId"`
-	CreateIfMissing bool   `json:"createIfMissing"`
+	Category         string `json:"category"`
+	ExcludeProductID int64  `json:"excludeProductId"`
+	CreateIfMissing  bool   `json:"createIfMissing"`
 }
 
 // Bootstrap 一次性下发给前端的所有业务数据。
 type Bootstrap struct {
-	Products             []Product                  `json:"products"`
-	Categories           []Category                 `json:"categories"`
-	Orders               []Order                    `json:"orders"`
-	PricingRule          PricingRule                `json:"pricingRule"`
-	LabInspirations      []LabInspiration           `json:"labInspirations"`
-	LabProjects          []LabProject               `json:"labProjects"`
-	DrawingInspirations  []DrawingInspirationRecord `json:"drawingInspirations"`
-	Expenses             []ExpenseRecord            `json:"expenses"`
-	InventoryTransactions []InventoryTransaction    `json:"inventoryTransactions"`
-	Markets              []MarketRecord             `json:"markets"`
-	OnlineIncome         float64                    `json:"onlineIncome"`
-	OnlineIncomeUpdatedAt string                    `json:"onlineIncomeUpdatedAt"`
-	PlannerTemplates     []PlannerTemplate          `json:"plannerTemplates"`
+	Products              []Product                  `json:"products"`
+	Categories            []Category                 `json:"categories"`
+	Orders                []Order                    `json:"orders"`
+	PricingRule           PricingRule                `json:"pricingRule"`
+	LabInspirations       []LabInspiration           `json:"labInspirations"`
+	LabProjects           []LabProject               `json:"labProjects"`
+	DrawingInspirations   []DrawingInspirationRecord `json:"drawingInspirations"`
+	Expenses              []ExpenseRecord            `json:"expenses"`
+	InventoryTransactions []InventoryTransaction     `json:"inventoryTransactions"`
+	Markets               []MarketRecord             `json:"markets"`
+	OnlineIncome          float64                    `json:"onlineIncome"`
+	OnlineIncomeUpdatedAt string                     `json:"onlineIncomeUpdatedAt"`
+	PlannerTemplates      []PlannerTemplate          `json:"plannerTemplates"`
 }
 
 // Snapshot 数据备份/恢复使用的完整快照。
 type Snapshot struct {
-	Version              int                        `json:"version"`
-	ExportedAt           string                     `json:"exportedAt"`
-	Products             []Product                  `json:"products"`
-	Categories           []Category                 `json:"categories"`
-	Orders               []Order                    `json:"orders"`
-	PricingRule          PricingRule                `json:"pricingRule"`
-	LabInspirations      []LabInspiration           `json:"labInspirations"`
-	LabProjects          []LabProject               `json:"labProjects"`
-	DrawingInspirations  []DrawingInspirationRecord `json:"drawingInspirations"`
-	Expenses             []ExpenseRecord            `json:"expenses"`
-	InventoryTransactions []InventoryTransaction    `json:"inventoryTransactions"`
-	Markets              []MarketRecord             `json:"markets"`
-	Settings             []AppSetting               `json:"settings"`
-	PlannerTemplates     []PlannerTemplate          `json:"plannerTemplates"`
+	Version               int                        `json:"version"`
+	ExportedAt            string                     `json:"exportedAt"`
+	Products              []Product                  `json:"products"`
+	Categories            []Category                 `json:"categories"`
+	Orders                []Order                    `json:"orders"`
+	PricingRule           PricingRule                `json:"pricingRule"`
+	LabInspirations       []LabInspiration           `json:"labInspirations"`
+	LabProjects           []LabProject               `json:"labProjects"`
+	DrawingInspirations   []DrawingInspirationRecord `json:"drawingInspirations"`
+	Expenses              []ExpenseRecord            `json:"expenses"`
+	InventoryTransactions []InventoryTransaction     `json:"inventoryTransactions"`
+	Markets               []MarketRecord             `json:"markets"`
+	Settings              []AppSetting               `json:"settings"`
+	PlannerTemplates      []PlannerTemplate          `json:"plannerTemplates"`
 }

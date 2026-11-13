@@ -67,10 +67,10 @@ func buildSingleOrder(product model.Product, input model.NewOrderInput, no, crea
 	netProfit := round2(totalAmount - input.ShippingCost - platformFee - goodsCost)
 
 	return model.Order{
-		OrderNo:        no,
-		Channel:        input.Channel,
-		CustomerName:   input.CustomerName,
-		Items:          []model.OrderItem{{
+		OrderNo:      no,
+		Channel:      input.Channel,
+		CustomerName: input.CustomerName,
+		Items: []model.OrderItem{{
 			ProductID:   product.ID,
 			ProductName: product.Name,
 			SKU:         product.SKU,

@@ -52,11 +52,15 @@ async function handleImport(e: Event) {
   try {
     const text = await file.text();
     const snapshot = JSON.parse(text) as unknown;
-    await api.importSnapshot(snapshot);
+    const result = await api.importSnapshot(snapshot);
     await store.loadAll();
-    ElMessage.success('数据导入成功，页面已刷新');
+    ElMessage.success(
+      result.source === 'dexie'
+        ? '旧版备份已自动转换并导入，页面已刷新'
+        : '数据导入成功，页面已刷新',
+    );
   } catch (e) {
-    ElMessage.error('导入失败，请检查文件格式');
+    ElMessage.error(e instanceof Error ? e.message : '导入失败，请检查文件格式');
   } finally {
     importing.value = false;
     if (fileInputRef.value) fileInputRef.value.value = '';
@@ -93,7 +97,8 @@ async function handleImport(e: Event) {
         <span class="card-section-title">导入数据</span>
       </template>
       <p class="section-desc">
-        从之前导出的 JSON 备份文件中恢复数据。<strong>导入会覆盖服务端数据库中的全部数据</strong>，请谨慎操作。
+        支持本系统导出的快照，也支持旧版纯前端版本（IndexedDB / Dexie）在「数据中心」导出的 JSON
+        备份，旧备份会自动转换为新版结构。<strong>导入会覆盖服务端数据库中的全部数据</strong>，请谨慎操作。
       </p>
       <el-button type="danger" :loading="importing" @click="fileInputRef?.click()">
         选择备份文件导入

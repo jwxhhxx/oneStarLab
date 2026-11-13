@@ -207,7 +207,10 @@ export const api = {
     return await response.blob();
   },
 
-  importSnapshot: async (snapshot: unknown): Promise<void> => {
-    await request<{ ok: boolean }>('/import', { method: 'POST', body: snapshot });
+  importSnapshot: async (snapshot: unknown): Promise<{ ok: boolean; source?: 'snapshot' | 'dexie' }> => {
+    return await request<{ ok: boolean; source?: 'snapshot' | 'dexie' }>('/import', {
+      method: 'POST',
+      body: snapshot,
+    });
   },
 };

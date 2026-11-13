@@ -156,6 +156,7 @@ View → Pinia store → src/api/client.ts → HTTP /api/v1
 - 创建/编辑/删除订单与库存回滚在同一事务内完成。
 - 批量扫码（`/inventory/scan`）在同一事务内更新库存、写流水并按扫码结果建单。
 - 导入快照时先清空全部业务表，再按原 id 写入并修正自增序列，全程单事务，失败即回滚。
+- 旧版纯前端备份由 `internal/store/legacy.go` 解析 `dexie-export-import` 格式，转换为同一套 `Snapshot` 后再走上面的导入事务；两个入口共用同一覆盖语义。
 
 ## API 约定
 

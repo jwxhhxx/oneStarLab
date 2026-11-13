@@ -1,10 +1,14 @@
 package api
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
 	"net/http"
 	"time"
 
 	"onestarlab/backend/internal/model"
+	"onestarlab/backend/internal/store"
 )
 
 func (s *Server) handleListExpenses(w http.ResponseWriter, r *http.Request) {
@@ -205,13 +209,46 @@ func (s *Server) handleExport(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleImport(w http.ResponseWriter, r *http.Request) {
-	var snapshot model.Snapshot
-	if !decodeJSON(w, r, &snapshot) {
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 64<<20))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "读取导入文件失败："+err.Error())
 		return
 	}
+	body = bytes.TrimSpace(body)
+	if len(body) == 0 {
+		writeError(w, http.StatusBadRequest, "导入文件为空")
+		return
+	}
+
+	var snapshot model.Snapshot
+	source := "snapshot"
+	var probe struct {
+		FormatName string `json:"formatName"`
+	}
+	if err := json.Unmarshal(body, &probe); err != nil {
+		writeError(w, http.StatusBadRequest, "导入文件不是有效的 JSON")
+		return
+	}
+	if probe.FormatName != "" {
+		// 旧版纯前端（Dexie/IndexedDB）的导出文件。
+		snapshot, err = store.ParseLegacyExport(body)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		source = "dexie"
+	} else {
+		decoder := json.NewDecoder(bytes.NewReader(body))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&snapshot); err != nil {
+			writeError(w, http.StatusBadRequest, "导入文件格式错误："+err.Error())
+			return
+		}
+	}
+
 	if err := s.store.ImportSnapshot(snapshot); err != nil {
 		fail(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "source": source})
 }
