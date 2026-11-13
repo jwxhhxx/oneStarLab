@@ -252,6 +252,41 @@ export interface PlannerTemplateInput {
   modules: PlannerModuleConfig[];
 }
 
+export type TapePatternType =
+  | 'dots'
+  | 'raindrops'
+  | 'stars'
+  | 'hearts'
+  | 'keys'
+  | 'wings'
+  | 'moons'
+  | 'flowers'
+  | 'clouds'
+  | 'bows';
+
+export interface TapePatternLayer {
+  id: string;
+  type: TapePatternType;
+  rows: number;
+  cols: number;
+  sizeMm: number;
+  color: string;
+  multi: boolean;
+  rotation: number;
+  stagger: boolean;
+  opacity: number;
+}
+
+export interface TapeDesign {
+  name: string;
+  widthMm: number;
+  lengthMm: number;
+  background: string;
+  transparent: boolean;
+  palette: string[];
+  layers: TapePatternLayer[];
+}
+
 export interface InventoryTransaction {
   id?: number;
   productId: number;

@@ -18,6 +18,7 @@
 - Expense and market records are managed as separate Dexie tables; the income page (`/income`) combines market income with the manual `onlineIncome` setting and subtracts `expenses` for a display-only profit. Keep these independent from order profit calculations unless a task explicitly asks to combine them.
 - Manual online income is stored in the `settings` table under the `onlineIncome` key with an `updatedAt` timestamp; update it through the store action, not by writing Dexie from a view.
 - The planner (`/planner`) keeps saved templates in the `plannerTemplates` table and renders pages in millimetres. `src/components/planner/PlannerSheet.vue` and `PlannerBlock.vue` are shared by the on-screen preview and the print container; do not introduce a second print-only layout. Paper size is applied at print time via a dynamic `@page { size: Wmm Hmm; margin: 0 }` rule.
+- The tape generator (`/tape`) is pure canvas with no database persistence; pattern drawing, millimetre-to-pixel conversion and PNG/PSD export live in `src/utils/tape.ts`. Import `ag-psd` dynamically only when exporting PSD so it stays out of the initial bundle.
 
 ## Build and Test
 - Install deps: `npm install`
@@ -32,7 +33,7 @@
 - When changing IndexedDB schema, increment Dexie `version()` in `src/db/appDb.ts` and define indexes carefully.
 - Router pages use lazy import and route `meta.title`; keep title behavior consistent with `router.afterEach`.
 - For third-party instances (for example ECharts), ensure mount/unmount lifecycle cleanup to avoid leaks.
-- After each modification, please commit the local code, but do not push it directly to the remote repository.
+- After each modification, please commit the local code. Do not push to the remote repository unless the user explicitly asks for it.
 
 ## References
 - Project overview and quickstart: `README.md`

@@ -58,13 +58,14 @@ View -> Store -> Dexie Table
 
 ### 组件层
 
-目录：[src/components/planner](src/components/planner)
+目录：[src/components/planner](src/components/planner)、[src/components/tape](src/components/tape)
 
 职责：
 
 - `PlannerSheet.vue` 按毫米尺寸渲染一张内页，负责留白、模块间距与 CSS 变量。
 - `PlannerBlock.vue` 负责 15 种内页模块的模板与样式。
-- 组件只接收 props 并渲染，不读写 store，也不感知打印流程。
+- `TapeCanvas.vue` 接收 `TapeDesign`，按容器宽度换算预览比例后交给 canvas 重绘。
+- 组件只接收 props 并渲染，不读写 store，也不感知打印或下载流程。
 
 关键约束：
 
@@ -77,7 +78,7 @@ View -> Store -> Dexie Table
 
 职责：
 
-- 统一管理 Product、Order、PricingRule、LabProject、MarketRecord、AppSetting、PlannerTemplate 等业务模型。
+- 统一管理 Product、Order、PricingRule、LabProject、MarketRecord、AppSetting、PlannerTemplate、TapeDesign 等业务模型。
 - 作为 Store、View、DB 的共同契约。
 
 建议：
@@ -86,12 +87,13 @@ View -> Store -> Dexie Table
 
 ### 工具层
 
-目录：[src/utils/pricing.ts](src/utils/pricing.ts)
+目录：[src/utils/pricing.ts](src/utils/pricing.ts)、[src/utils/tape.ts](src/utils/tape.ts)
 
 职责：
 
-- 存放纯函数计算逻辑（如建议售价、最小售价）。
-- 避免将公式分散在页面组件中。
+- `pricing.ts` 存放定价相关的纯函数计算逻辑（如建议售价、最小售价）。
+- `tape.ts` 负责胶带图案绘制、毫米到像素换算、PNG/PSD 导出，视图层只传设计参数与 DPI。
+- 避免将公式或绘制细节分散在页面组件中。
 
 ## 路由设计
 
@@ -104,12 +106,14 @@ View -> Store -> Dexie Table
 - 收入记录统一在 `/income` 页面（集市收入 + 线上收入 + 利润），旧的 `/markets` 保留为跳转到 `/income` 的重定向。
 - 印章相关能力统一在单一路由页面中，通过页内 Tab 切换文字印章与点阵印章。
 - 内页生成器位于 `/planner`，模板持久化在 `plannerTemplates`，打印时动态注入 `@page { size: Wmm Hmm; margin: 0 }` 以匹配所选尺寸。
+- 胶带生成位于 `/tape`，设计只存在页面状态，不写 IndexedDB；导出由 `src/utils/tape.ts` 按 DPI 生成 canvas。
 
 ## 第三方库使用要点
 
 - ECharts：在组件卸载时释放实例，防止内存泄漏。
 - Dexie：跨表写操作使用 transaction，确保一致性。
 - Pinia：保持 action 粒度清晰，避免页面中重复业务逻辑。
+- ag-psd：只在导出 PSD 时动态 import，避免增加首屏体积；导出后按图层名组织图案。
 
 ## 当前架构边界
 

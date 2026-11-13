@@ -79,6 +79,12 @@ const router = createRouter({
       component: () => import('@/views/PlannerView.vue'),
       meta: { title: '内页生成器' },
     },
+    {
+      path: '/tape',
+      name: 'tape',
+      component: () => import('@/views/TapeView.vue'),
+      meta: { title: '胶带生成' },
+    },
   ],
 });
 
