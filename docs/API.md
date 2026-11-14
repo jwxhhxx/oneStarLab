@@ -4,7 +4,10 @@
 
 ## 认证与通用约定
 
-- 默认无认证；设置 `API_TOKEN` 环境变量后，所有 `/api/v1` 接口（包括健康检查）需携带 `Authorization: Bearer <token>`。
+- 浏览器使用**单口令登录**：`POST /auth/login` 成功后服务端下发 `onestarlab_session` Cookie（HttpOnly、SameSite=Lax、7 天有效；TLS 或 `X-Forwarded-Proto: https` 时带 `Secure`）。
+- 公开接口只有 `GET /health`、`GET /auth/status`、`POST /auth/login`、`POST /auth/logout`；其余 `/api/v1` 接口都需要有效会话 Cookie，或设置 `API_TOKEN` 后携带 `Authorization: Bearer <token>`。
+- 默认口令 `123456`；`POST /auth/passcode` 修改口令后，服务端轮换会话密钥并重发 Cookie，其他旧会话立即失效。
+- 同一 IP 连续 5 次登录失败会锁定 60 秒，返回 `429`。
 - 成功：`200` 返回资源对象、数组或 `{ "ok": true }`；删除成功返回 `{ "ok": true }`。
 - 失败：非 2xx，响应体为 `{ "error": "中文错误信息" }`。
 - 请求体上限 64MB，未知字段会被拒绝（`400`）。
@@ -14,9 +17,33 @@
 
 | 状态码 | 场景 |
 | --- | --- |
-| `400` | 参数/业务校验失败（如库存不足、默认分类不可删除、金额为负） |
+| `400` | 参数/业务校验失败（如库存不足、默认分类不可删除、金额为负、口令长度不合法） |
+| `401` | 未登录、会话过期或口令不正确 |
 | `404` | 资源不存在 |
+| `429` | 登录尝试过于频繁 |
 | `500` | 服务端错误（数据库异常等） |
+
+## 登录与会话
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/auth/status` | `{ "authenticated": false, "usingDefault": true }`，公开 |
+| POST | `/auth/login` | body `{ "passcode": "123456" }`；成功 `{ "ok": true, "usingDefault": true }` 并下发 Cookie |
+| POST | `/auth/logout` | 清除 Cookie，返回 `{ "ok": true }` |
+| POST | `/auth/passcode` | body `{ "current": "123456", "next": "newpass" }`；成功后轮换会话密钥并重发 Cookie |
+
+登录失败示例：
+
+```json
+{ "error": "口令不正确" }
+```
+
+会话校验失败示例：
+
+```json
+{ "error": "未登录或登录已过期" }
+```
+
 
 ## 健康检查与初始化
 

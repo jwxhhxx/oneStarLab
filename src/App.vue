@@ -1,11 +1,34 @@
 <script setup lang="ts">
-import { Brush, Calendar, Coin, DataAnalysis, EditPen, Files, Goods, MagicStick, Memo, Menu, Money, Picture, Tickets } from '@element-plus/icons-vue';
+import { Brush, Calendar, Coin, DataAnalysis, EditPen, Files, Goods, MagicStick, Memo, Menu, Money, Picture, Setting, SwitchButton, Tickets } from '@element-plus/icons-vue';
+import { ElMessageBox } from 'element-plus';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
+
+import { useAuthStore } from '@/stores/useAuthStore';
 
 const route = useRoute();
+const router = useRouter();
+const authStore = useAuthStore();
 const isMobile = ref(false);
 const mobileMenuVisible = ref(false);
+
+const isAuthPage = computed(() => route.name === 'login');
+
+async function handleLogout() {
+  try {
+    await ElMessageBox.confirm('退出后需要重新输入口令才能进入。', '退出登录', {
+      confirmButtonText: '退出登录',
+      cancelButtonText: '取消',
+      type: 'warning',
+    });
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') return;
+    return;
+  }
+  await authStore.logout();
+  mobileMenuVisible.value = false;
+  await router.replace({ name: 'login' });
+}
 
 let mediaQuery: MediaQueryList | null = null;
 
@@ -47,6 +70,7 @@ const menus = [
   { path: '/planner', label: '内页生成器', icon: Memo },
   { path: '/tape', label: '胶带生成', icon: Brush },
   { path: '/data', label: '数据中心', icon: Files },
+  { path: '/settings', label: '设置', icon: Setting },
 ];
 
 const pageTitle = computed(() => String(route.meta.title ?? '店铺经营后台'));
@@ -60,7 +84,8 @@ const todayText = computed(() =>
 </script>
 
 <template>
-  <el-container class="app-shell">
+  <router-view v-if="isAuthPage" />
+  <el-container v-else class="app-shell">
     <el-aside v-if="!isMobile" width="240px" class="app-sidebar">
       <div class="brand-panel">
         <div class="brand-chip">OneStarLab</div>
@@ -78,6 +103,9 @@ const todayText = computed(() =>
       <div class="sidebar-footer">
         <div class="sidebar-pill">服务端存储</div>
         <p>数据保存在服务端 SQLite，建议定期导出备份。</p>
+        <el-button class="sidebar-logout" text type="danger" :icon="SwitchButton" @click="handleLogout">
+          退出登录
+        </el-button>
       </div>
     </el-aside>
 
@@ -128,6 +156,10 @@ const todayText = computed(() =>
           <span>{{ item.label }}</span>
         </el-menu-item>
       </el-menu>
+
+      <div class="mobile-drawer-footer">
+        <el-button text type="danger" :icon="SwitchButton" @click="handleLogout">退出登录</el-button>
+      </div>
     </el-drawer>
   </el-container>
 </template>

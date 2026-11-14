@@ -16,17 +16,24 @@ import (
 
 // Server 承载 HTTP 路由与静态资源。
 type Server struct {
-	store      *store.Store
-	webDir     string
-	apiToken   string
-	corsOrigin string
+	store        *store.Store
+	webDir       string
+	apiToken     string
+	corsOrigin   string
+	loginLimiter *loginLimiter
 }
 
 func NewServer(st *store.Store, webDir, apiToken, corsOrigin string) *Server {
 	if corsOrigin == "" {
 		corsOrigin = "*"
 	}
-	return &Server{store: st, webDir: webDir, apiToken: apiToken, corsOrigin: corsOrigin}
+	return &Server{
+		store:        st,
+		webDir:       webDir,
+		apiToken:     apiToken,
+		corsOrigin:   corsOrigin,
+		loginLimiter: newLoginLimiter(),
+	}
 }
 
 // Handler 构建完整路由。
@@ -35,6 +42,11 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("GET /api/v1/health", s.handleHealth)
 	mux.HandleFunc("GET /api/v1/bootstrap", s.handleBootstrap)
+
+	mux.HandleFunc("POST /api/v1/auth/login", s.handleLogin)
+	mux.HandleFunc("POST /api/v1/auth/logout", s.handleLogout)
+	mux.HandleFunc("GET /api/v1/auth/status", s.handleAuthStatus)
+	mux.HandleFunc("POST /api/v1/auth/passcode", s.handleChangePasscode)
 
 	mux.HandleFunc("GET /api/v1/products", s.handleListProducts)
 	mux.HandleFunc("POST /api/v1/products", s.handleCreateProduct)
@@ -113,6 +125,7 @@ func (s *Server) withMiddleware(next http.Handler) http.Handler {
 			allowed := s.corsOrigin
 			if allowed == "*" || origin == allowed || containsOrigin(allowed, origin) {
 				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Access-Control-Allow-Credentials", "true")
 			}
 			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
@@ -124,10 +137,13 @@ func (s *Server) withMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		if s.apiToken != "" && strings.HasPrefix(r.URL.Path, "/api/") {
-			auth := r.Header.Get("Authorization")
-			if auth != "Bearer "+s.apiToken {
-				writeError(w, http.StatusUnauthorized, "未授权")
+		if strings.HasPrefix(r.URL.Path, "/api/") && !isPublicAPIPath(r.URL.Path) {
+			authorized := s.apiToken != "" && r.Header.Get("Authorization") == "Bearer "+s.apiToken
+			if !authorized {
+				authorized = s.hasValidSession(r)
+			}
+			if !authorized {
+				writeError(w, http.StatusUnauthorized, "未登录或登录已过期")
 				return
 			}
 		}

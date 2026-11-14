@@ -21,6 +21,7 @@
 - Manual online income is stored in `settings` under the `onlineIncome` key with an `updatedAt` timestamp; update it through the API/store, not by writing SQL from a view.
 - The planner (`/planner`) keeps saved templates in `planner_templates` and renders pages in millimetres. `src/components/planner/PlannerSheet.vue` and `PlannerBlock.vue` are shared by the on-screen preview and the print container; do not introduce a second print-only layout. Paper size is applied at print time via a dynamic `@page { size: Wmm Hmm; margin: 0 }` rule.
 - The tape generator (`/tape`) is pure canvas with no database persistence; pattern drawing, millimetre-to-pixel conversion and PNG/PSD export live in `src/utils/tape.ts`. Import `ag-psd` dynamically only when exporting PSD so it stays out of the initial bundle.
+- Authentication is a single passcode plus a signed session cookie: passcode hashing and session tokens live in `backend/internal/auth`, auth handlers in `backend/internal/api/auth.go`, login state in `src/stores/useAuthStore.ts`. Every non-public API path requires a valid session cookie or an optional `API_TOKEN`; add new public paths explicitly and never bypass the guard in views.
 
 ## Build and Test
 - Install deps: `npm ci`
@@ -35,7 +36,8 @@
 - After mutating data, refresh state via `loadAll()` so the UI matches the server.
 - Keep multi-table writes (orders + stock + inventory log, snapshot import) inside a single SQL transaction in `backend/internal/store`.
 - When changing the SQLite schema, update `backend/internal/db/db.go` and keep migrations idempotent (`CREATE TABLE IF NOT EXISTS`, guarded `ALTER TABLE`).
-- Router pages use lazy import and route `meta.title`; keep title behavior consistent with `router.afterEach`.
+- Router pages use lazy import and route `meta.title`; keep title behavior consistent with `router.afterEach`. Public routes must set `meta.public` and are handled by the global auth guard.
+- Passwords/passcodes must never be logged, echoed in API responses, or written to git; use the auth package helpers instead of comparing hashes inline.
 - For third-party instances (for example ECharts), ensure mount/unmount lifecycle cleanup to avoid leaks.
 - After each modification, commit the local code. Do not push to the remote repository unless the user explicitly asks for it.
 

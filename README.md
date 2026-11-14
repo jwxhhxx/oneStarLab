@@ -22,6 +22,7 @@ OneStarLab 是前后端分离的手帐店铺经营后台：Vue 3 单页应用 + 
 - 内页生成器：按毫米拼装手帐内页，支持打印和导出 1:1 PDF
 - 胶带生成：自定义胶带宽长、图案排布与配色，导出 PNG 或分层 PSD
 - 数据中心：导出 / 导入整库 JSON 快照
+- 单口令登录：默认口令 `123456`，登录后可在「设置」中修改；未登录无法读写任何业务数据
 
 ## 页面说明
 
@@ -37,6 +38,7 @@ OneStarLab 是前后端分离的手帐店铺经营后台：Vue 3 单页应用 + 
 - 内页生成器：选择 M5、A7、A6per、三折页等尺寸，组合月历、时间轴、待办、四象限、账单、格纸等模块，调整配色与打印份数后直接打印或导出 PDF
 - 胶带生成：自定义胶带宽度与长度，叠加波点、星星、爱心、钥匙、翅膀等图案层，逐层设置排数、列数、大小、旋转与配色，导出 PNG 或可继续编辑的分层 PSD
 - 数据中心：显示服务端存储状态，导出整库 JSON，或选择备份文件覆盖导入
+- 登录与设置：口令登录，默认 `123456`；设置页可修改口令，修改后所有旧会话失效
 
 ## 技术栈
 
@@ -66,14 +68,16 @@ OneStarLab 是前后端分离的手帐店铺经营后台：Vue 3 单页应用 + 
 src/                    前端
   api/client.ts         统一 REST 客户端
   components/           planner / tape 可复用组件
-  router/               路由与页面标题
+  router/               路由、登录守卫与页面标题
   stores/useShopStore.ts 业务编排层（调用 API、维护页面状态）
+  stores/useAuthStore.ts 登录态与口令管理
   types/                业务类型
   utils/                纯函数工具（定价、胶带绘制）
   views/                页面视图
 backend/
   cmd/server/           服务入口
   internal/api/         路由、中间件与 HTTP handler
+  internal/auth/        口令哈希与会话签名
   internal/store/       业务逻辑与 SQL
   internal/db/          建表、迁移与种子数据
   internal/model/       请求/响应结构体
@@ -100,7 +104,7 @@ npm ci
 npm run dev
 ```
 
-访问 <http://localhost:5173>。前端默认请求同源 `/api/v1`，由 Vite 代理到 `http://127.0.0.1:8080`；后端地址不同时设置 `VITE_PROXY_TARGET`。
+访问 <http://localhost:5173>，首次进入会跳转到登录页，默认口令 `123456`。前端默认请求同源 `/api/v1`，由 Vite 代理到 `http://127.0.0.1:8080`；后端地址不同时设置 `VITE_PROXY_TARGET`。
 
 健康检查：
 
@@ -151,7 +155,7 @@ docker compose build     # 构建运行镜像
 | `PORT` | `8080` | HTTP 监听端口 |
 | `DATABASE_PATH` | `data/onestar.db` | SQLite 文件路径，容器内为 `/data/onestar.db` |
 | `WEB_DIR` | 空 | 前端静态目录；为空时只提供 API |
-| `API_TOKEN` | 空 | 设置后所有 `/api/v1` 请求需携带 `Authorization: Bearer <token>` |
+| `API_TOKEN` | 空 | 可选的服务间令牌；设置后 `/api/v1` 非公开路径需携带 `Authorization: Bearer <token>`，浏览器会话 cookie 同样可用 |
 | `CORS_ORIGINS` | `*` | 允许的来源，逗号分隔；`*` 表示不限制 |
 
 前端（构建时注入）：

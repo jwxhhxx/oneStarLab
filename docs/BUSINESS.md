@@ -21,7 +21,7 @@ OneStarLab 采用前后端分离结构：浏览器里的 Vue 页面负责展示�
 - `drawing_inspirations`：灵感生成结果记录。
 - `expenses`：开店支出记录。
 - `markets`：集市出摊记录（名称、日期、地点、每场收入）。
-- `settings`：键值配置表，当前保存线上收入（`onlineIncome`）与最后更新时间。
+- `settings`：键值配置表，保存线上收入（`onlineIncome`）、最后更新时间，以及口令哈希/盐/迭代次数、会话密钥等认证数据（`auth.*`）。
 - `planner_templates`：内页生成器保存的模板（尺寸、留白、配色、模块列表）。
 - `inventory_transactions`：入/出库事务日志（扫码/手动/订单触发）。
 - `categories`：商品分类，包含默认分类「未分类」（id=0）。
@@ -31,6 +31,15 @@ OneStarLab 采用前后端分离结构：浏览器里的 Vue 页面负责展示�
 ## 页面与业务流说明
 
 以下按页面列举核心业务行为与背后发生的逻辑：
+
+### 登录与设置（Login / Settings）
+
+- 第一次打开站点会跳转到登录页；初始口令固定为 `123456`，登录页底部有提示。
+- 登录成功后服务端下发 7 天有效的 HttpOnly 会话 Cookie；关闭浏览器再打开通常无需重新输入。
+- 在「设置」中可以修改访问口令：需要输入当前口令，新口令长度 4–32 位，且不能与当前口令相同。
+- 修改成功后服务端会轮换会话密钥，其他设备/浏览器上的旧会话立即失效，当前会话自动续期。
+- 口令连续输错 5 次会锁定 60 秒，防止简单爆破。忘记口令时，可在服务端清空 `settings` 表中的 `auth.passcodeHash` 等键后重启，系统会恢复默认口令。
+- 通过 HTTPS 访问时 Cookie 带 `Secure`；如果站点由 Nginx Proxy Manager 终止 TLS，需要把 `X-Forwarded-Proto: https` 传给容器（NPM 默认会传）。
 
 ### 经营看板（Dashboard）
 - 展示由 `orders` 与 `products` 聚合得到的关键指标（总销售、净利润、月度趋势、低库存统计）。

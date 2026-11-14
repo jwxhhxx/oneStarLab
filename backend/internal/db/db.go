@@ -5,9 +5,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	_ "modernc.org/sqlite"
+
+	"onestarlab/backend/internal/auth"
 )
 
 // Open 打开（必要时创建）SQLite 数据库，并初始化表结构与默认数据。
@@ -213,6 +216,54 @@ func seed(conn *sql.DB) error {
 			`INSERT OR IGNORE INTO categories (name, created_at) VALUES (?, ?)`, name, now,
 		); err != nil {
 			return fmt.Errorf("seed category %s: %w", name, err)
+		}
+	}
+	return seedAuth(conn, now)
+}
+
+// seedAuth 补建登录口令与会话密钥，已有值时不覆盖。
+func seedAuth(conn *sql.DB, now string) error {
+	var passcodeRows int
+	if err := conn.QueryRow(`SELECT COUNT(*) FROM settings WHERE key = 'auth.passcodeHash'`).Scan(&passcodeRows); err != nil {
+		return fmt.Errorf("check passcode: %w", err)
+	}
+	if passcodeRows == 0 {
+		credentials, err := auth.HashPasscode(auth.DefaultPasscode)
+		if err != nil {
+			return fmt.Errorf("hash default passcode: %w", err)
+		}
+		values := []struct {
+			key   string
+			value string
+		}{
+			{"auth.passcodeSalt", credentials.Salt},
+			{"auth.passcodeHash", credentials.Hash},
+			{"auth.passcodeIterations", strconv.Itoa(credentials.Iterations)},
+			{"auth.passcodeIsDefault", "1"},
+		}
+		for _, item := range values {
+			if _, err := conn.Exec(
+				`INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES (?, ?, ?)`,
+				item.key, item.value, now,
+			); err != nil {
+				return fmt.Errorf("seed setting %s: %w", item.key, err)
+			}
+		}
+	}
+
+	var secretRows int
+	if err := conn.QueryRow(`SELECT COUNT(*) FROM settings WHERE key = 'auth.sessionSecret'`).Scan(&secretRows); err != nil {
+		return fmt.Errorf("check session secret: %w", err)
+	}
+	if secretRows == 0 {
+		secret, err := auth.RandomToken(32)
+		if err != nil {
+			return fmt.Errorf("generate session secret: %w", err)
+		}
+		if _, err := conn.Exec(
+			`INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES ('auth.sessionSecret', ?, ?)`, secret, now,
+		); err != nil {
+			return fmt.Errorf("seed session secret: %w", err)
 		}
 	}
 	return nil

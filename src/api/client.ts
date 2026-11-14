@@ -31,6 +31,17 @@ type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 interface RequestOptions {
   method?: Method;
   body?: unknown;
+  skipAuthRedirect?: boolean;
+}
+
+interface AuthStatus {
+  authenticated: boolean;
+  usingDefault: boolean;
+}
+
+interface AuthResult {
+  ok: boolean;
+  usingDefault?: boolean;
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -43,6 +54,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     response = await fetch(`${API_BASE}${path}`, {
       method: options.method ?? 'GET',
       headers,
+      credentials: 'include',
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
     });
   } catch {
@@ -50,6 +62,9 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   }
 
   if (!response.ok) {
+    if (response.status === 401 && !options.skipAuthRedirect) {
+      window.dispatchEvent(new CustomEvent('onestarlab:unauthorized'));
+    }
     let message = `请求失败（${response.status}）`;
     try {
       const data = (await response.json()) as { error?: string };
@@ -74,6 +89,20 @@ function query(params: Record<string, string | number | boolean | undefined>): s
 }
 
 export const api = {
+  auth: {
+    status: () => request<AuthStatus>('/auth/status', { skipAuthRedirect: true }),
+    login: (passcode: string) =>
+      request<AuthResult>('/auth/login', {
+        method: 'POST',
+        body: { passcode },
+        skipAuthRedirect: true,
+      }),
+    logout: () =>
+      request<{ ok: boolean }>('/auth/logout', { method: 'POST', skipAuthRedirect: true }),
+    changePasscode: (current: string, next: string) =>
+      request<AuthResult>('/auth/passcode', { method: 'POST', body: { current, next } }),
+  },
+
   bootstrap: () => request<BootstrapData>('/bootstrap'),
 
   products: {
@@ -202,7 +231,7 @@ export const api = {
   exportSnapshot: async (): Promise<Blob> => {
     const headers: Record<string, string> = {};
     if (API_TOKEN) headers.Authorization = `Bearer ${API_TOKEN}`;
-    const response = await fetch(`${API_BASE}/export`, { headers });
+    const response = await fetch(`${API_BASE}/export`, { headers, credentials: 'include' });
     if (!response.ok) throw new Error(`导出失败（${response.status}）`);
     return await response.blob();
   },

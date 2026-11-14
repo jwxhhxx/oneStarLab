@@ -1,8 +1,16 @@
 import { createRouter, createWebHashHistory } from 'vue-router';
 
+import { useAuthStore } from '@/stores/useAuthStore';
+
 const router = createRouter({
   history: createWebHashHistory(import.meta.env.BASE_URL),
   routes: [
+    {
+      path: '/login',
+      name: 'login',
+      component: () => import('@/views/LoginView.vue'),
+      meta: { title: '登录', public: true },
+    },
     {
       path: '/',
       name: 'dashboard',
@@ -85,7 +93,33 @@ const router = createRouter({
       component: () => import('@/views/TapeView.vue'),
       meta: { title: '胶带生成' },
     },
+    {
+      path: '/settings',
+      name: 'settings',
+      component: () => import('@/views/SettingsView.vue'),
+      meta: { title: '设置' },
+    },
   ],
+});
+
+router.beforeEach(async (to) => {
+  const auth = useAuthStore();
+  if (!auth.checked) {
+    await auth.check();
+  }
+  if (to.meta.public) {
+    if (to.name === 'login' && auth.authenticated) {
+      return { path: '/' };
+    }
+    return true;
+  }
+  if (!auth.authenticated) {
+    return {
+      name: 'login',
+      query: to.fullPath === '/' ? {} : { redirect: to.fullPath },
+    };
+  }
+  return true;
 });
 
 router.afterEach((to) => {

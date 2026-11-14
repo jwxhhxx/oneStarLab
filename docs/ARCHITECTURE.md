@@ -57,9 +57,9 @@ View → Pinia store → src/api/client.ts → HTTP /api/v1
 
 职责：
 
-- 统一 base URL（默认 `/api/v1`）、JSON 序列化、Bearer Token（可选）。
-- 把非 2xx 响应的 `{ "error": "..." }` 转成 `Error` 抛出。
-- 为每类资源提供方法：products、categories、orders、pricing、inventory、lab、drawings、expenses、markets、settings、planner、export/import。
+- 统一 base URL（默认 `/api/v1`）、JSON 序列化、Bearer Token（可选）与 Cookie 会话（`credentials: 'include'`）。
+- 把非 2xx 响应的 `{ "error": "..." }` 转成 `Error` 抛出；收到 401 时广播 `onestarlab:unauthorized`，由 `main.ts` 统一跳转登录页。
+- 为每类资源提供方法：auth、products、categories、orders、pricing、inventory、lab、drawings、expenses、markets、settings、planner、export/import。
 
 ### 前端组件层
 
@@ -112,9 +112,21 @@ View → Pinia store → src/api/client.ts → HTTP /api/v1
 职责：
 
 - Go 1.22 ServeMux 方法路由，统一前缀 `/api/v1`。
-- CORS、可选 Bearer Token、请求日志、JSON 编解码（限制 64MB、拒绝未知字段）。
+- 认证：公开路径仅 `health` 与 `/auth/*`；其余请求接受会话 Cookie 或可选 `API_TOKEN` Bearer，否则 401。
+- 登录限流（同一 IP 连续失败 5 次锁 60 秒）、会话 Cookie 签发/清理、口令修改后轮换会话密钥。
+- CORS、请求日志、JSON 编解码（限制 64MB、拒绝未知字段）。
 - 错误映射：`ErrNotFound` → 404；常见业务校验错误 → 400；其余 → 500。
 - 静态资源：从 `WEB_DIR` 提供构建产物，未命中的路径回退 `index.html`。
+
+### 后端认证与数据文件
+
+目录：[backend/internal/auth](backend/internal/auth)
+
+职责：
+
+- 口令哈希：PBKDF2-HMAC-SHA256（12 万次迭代、16 字节随机盐），比较使用常量时间。
+- 会话：HMAC-SHA256 签名的 `payload.sig` 令牌，payload 含过期时间与随机 nonce；默认 7 天。
+- 口令与盐、会话密钥存放在 `settings` 表的 `auth.*` 键中；首次启动写入默认口令 `123456` 并标记 `auth.passcodeIsDefault=1`。
 
 ### 后端业务层
 
@@ -134,6 +146,7 @@ View → Pinia store → src/api/client.ts → HTTP /api/v1
 
 - 建表与索引（`migrate`）。
 - 种子数据：默认定价规则、`未分类` 与四个默认分类（`INSERT OR IGNORE`，可重复执行）。
+- 认证种子：首次启动写入默认口令哈希、随机会话密钥与 `auth.passcodeIsDefault=1`，重启不覆盖已有值。
 
 ### 后端模型层
 
@@ -150,6 +163,7 @@ View → Pinia store → src/api/client.ts → HTTP /api/v1
 - 连接池限制为单连接（`SetMaxOpenConns(1)`），配合 `journal_mode=WAL`、`synchronous=NORMAL`、`busy_timeout=5000`，避免并发写冲突。
 - 订单商品项、研发打样记录、内页模板模块以 JSON 文本列存储；金额用 REAL，时间用 UTC ISO 字符串（毫秒精度）。
 - 业务表共 12 张：`products`、`categories`、`orders`、`pricing_rules`、`lab_inspirations`、`lab_projects`、`drawing_inspirations`、`expenses`、`inventory_transactions`、`markets`、`settings`、`planner_templates`。
+- `settings` 同时保存线上收入（`onlineIncome`）与认证数据（`auth.passcodeHash`、`auth.passcodeSalt`、`auth.passcodeIterations`、`auth.passcodeIsDefault`、`auth.sessionSecret`）。
 
 ### 一致性与事务
 
@@ -165,7 +179,7 @@ View → Pinia store → src/api/client.ts → HTTP /api/v1
 - 列表接口不分页（单店数据量小），一次返回全量。
 - `GET /bootstrap` 一次返回首页所需全部数据，避免前端多次往返。
 - `GET /export` 返回附件 `onestarlab-backup.json`；`POST /import` 覆盖导入。
-- 设置 `API_TOKEN` 后，所有 `/api/v1` 接口（含健康检查）均需 `Authorization: Bearer <token>`。
+- 认证使用登录 Cookie；设置 `API_TOKEN` 后，非公开路径也可用 `Authorization: Bearer <token>`，适合脚本调用。公开路径为 `health` 与 `/auth/*`。
 
 接口清单见 [docs/API.md](API.md)。
 
@@ -176,11 +190,13 @@ View → Pinia store → src/api/client.ts → HTTP /api/v1
 特性：
 
 - 使用 hash 路由（`createWebHashHistory`），静态托管无需服务端 rewrite。
+- 全局守卫先调用 `useAuthStore().check()`：未登录时除 `/login` 外都跳转到登录页并记录 `redirect`；已登录访问 `/login` 则回首页。
 - 页面组件懒加载，`meta.title` 在 `router.afterEach` 统一写入 `document.title`。
 - 收入记录统一在 `/income`（集市收入 + 线上收入 + 利润），旧 `/markets` 重定向过去。
 - 印章能力集中在单一路由，页内 Tab 切换文字与点阵印章。
 - 内页生成器位于 `/planner`，模板保存到服务端 `planner_templates`；打印时动态注入 `@page { size: Wmm Hmm; margin: 0 }`。
 - 胶带生成位于 `/tape`，设计只存在页面状态，不写数据库。
+- 设置页位于 `/settings`：修改访问口令，成功后会提示下次使用新口令。
 
 ## 构建与部署
 
@@ -200,14 +216,15 @@ View → Pinia store → src/api/client.ts → HTTP /api/v1
 
 ## 当前架构边界
 
-- 单用户、单实例：没有账号体系与多租户；可选 `API_TOKEN` 只做简单访问保护。
+- 单用户、单实例：没有多账号体系；只有一道访问口令与可选 `API_TOKEN`，适合个人自用。
 - 没有实时同步或多端推送；多设备同时操作时以最后一次写入为准。
+- 登录会话 7 天有效；修改口令会轮换密钥并使其他旧会话失效。
 - 没有分页与全文搜索，适合单店数据规模。
 - 旧纯前端版本的 IndexedDB 数据不会自动迁移到 SQLite。
 
 后续演进方向：
 
-1. 账号与权限（多用户/多店）。
+1. 多用户/多店与细粒度权限。
 2. 订单、商品的查询分页与筛选。
 3. 定时备份与远端对象存储。
 4. 需要实时协作时再引入 WebSocket/SSE 与服务端版本号。
