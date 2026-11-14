@@ -20,6 +20,11 @@ on:
         required: false
         default: ''
         type: string
+      skip_deploy:
+        description: '只构建并推送镜像，不部署到 VPS（首次验证 ACR 时使用）'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -124,6 +129,7 @@ jobs:
   deploy:
     name: 部署到 VPS
     needs: publish
+    if: ${{ !inputs.skip_deploy }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: production

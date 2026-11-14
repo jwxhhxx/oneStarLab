@@ -233,6 +233,8 @@ git push origin v1.0.0
 
 也可以手动触发：Actions → Release → Run workflow；`tag` 输入留空时使用 `sha-<7位提交号>`。
 
+首次只验证 ACR 推送时，手动触发并勾选 `skip_deploy`（只构建推送、不部署）；确认 ACR 中能看到镜像、VPS 已准备完毕，再用 tag 跑正式发布。
+
 ## 4. 回滚
 
 ### 自动回滚
