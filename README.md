@@ -131,7 +131,7 @@ docker compose up --build -d
 仓库已包含：
 
 - [`.github/workflows/release.yml`](.github/workflows/release.yml)：tag 发布、构建推送、SSH 部署
-- [`deploy/docker-compose.yml`](deploy/docker-compose.yml)：VPS 侧编排（使用 ACR 镜像，不在服务器构建）
+- [`deploy/docker-compose.yml`](deploy/docker-compose.yml)：VPS 侧编排（使用 ACR 镜像，加入 external `proxy` 网络，由 NPM 等反代，不映射宿主机端口）
 - [`deploy/deploy.sh`](deploy/deploy.sh)：拉取、启动、健康检查与自动回滚
 - [`deploy/backup.sh`](deploy/backup.sh)：SQLite 备份
 

@@ -1,13 +1,15 @@
 # 生产编排：镜像来自阿里云 ACR，不在服务器上构建。
 # 使用前把 .env.example 复制为 .env 并填写。
+# 容器加入已有的 external 网络，由 Nginx Proxy Manager 等反向代理按
+# http://onestarlab:8080 访问；不映射宿主机端口。
 name: onestarlab
 
 services:
   onestarlab:
     image: ${ACR_IMAGE:?请在 .env 中设置 ACR_IMAGE}:${IMAGE_TAG:-latest}
     container_name: onestarlab
-    ports:
-      - "${BIND_ADDR:-0.0.0.0}:${APP_PORT:-8080}:8080"
+    expose:
+      - "8080"
     environment:
       PORT: "8080"
       DATABASE_PATH: /data/onestar.db
@@ -17,6 +19,8 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
     volumes:
       - ./data:/data
+    networks:
+      - proxy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/api/v1/health"]
@@ -31,3 +35,8 @@ services:
         max-file: "3"
     security_opt:
       - no-new-privileges:true
+
+networks:
+  proxy:
+    external: true
+    name: ${PROXY_NETWORK:-proxy}

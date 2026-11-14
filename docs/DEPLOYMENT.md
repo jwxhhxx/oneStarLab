@@ -32,7 +32,7 @@ VPS /opt/onestarlab
              失败则回滚到 IMAGE_TAG 记录的上一版本
       │
       ▼
-http://<VPS>:8080  （建议再套 Caddy/Nginx 上 HTTPS）
+http://onestarlab:8080  （由 NPM/Caddy 反代到 https://<域名>）
 ```
 
 设计要点：
@@ -151,8 +151,7 @@ sudo install -d -o 100 -g 101 data
 ```dotenv
 ACR_IMAGE=registry.cn-hangzhou.aliyuncs.com/onestarlab/onestarlab
 IMAGE_TAG=latest
-APP_PORT=8080
-BIND_ADDR=0.0.0.0
+PROXY_NETWORK=proxy
 TZ=Asia/Shanghai
 API_TOKEN=
 CORS_ORIGINS=*
@@ -161,8 +160,9 @@ CORS_ORIGINS=*
 说明：
 
 - `ACR_IMAGE` 必须和 workflow 里的镜像名一致（ACR 地址 + 命名空间 + 仓库名）。
+- `PROXY_NETWORK` 是反向代理所在的 external 网络名，默认 `proxy`；部署前必须已经存在（见第 5 节）。
 - `API_TOKEN` 建议先留空。前端 token 是构建时注入的，当前镜像没有注入；如果服务端设置了非空 token，页面会 401。需要访问控制时，优先用 HTTPS + 反向代理鉴权或安全组白名单。
-- 如果前面要放 Caddy/Nginx，把 `BIND_ADDR` 改成 `127.0.0.1`，只让反代访问 8080。
+- 本项目不映射宿主机端口，只通过 external 网络给反向代理访问。
 
 ### 2.5 首次登录 ACR 并部署
 
@@ -172,18 +172,19 @@ cd /opt/onestarlab
 ./deploy.sh latest
 ```
 
-首次执行时 `.env` 里还没有上一版本，健康检查失败会直接报错退出；看日志排查即可。
+首次执行时 `.env` 里还没有上一版本，健康检查失败会直接报错退出；看日志排查即可。部署前确认 external 网络已存在（见第 5 节），否则 compose 会报 `network proxy declared as external, but could not be found`。
 
 ### 2.6 防火墙与端口
 
 ```bash
 sudo ufw allow OpenSSH
-sudo ufw allow 8080/tcp     # 若走反向代理，这行可以不加
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
 sudo ufw enable
 sudo ufw status
 ```
 
-云厂商的安全组也要放行对应端口。最终建议只暴露 `22`、`80`、`443`，8080 只对反向代理开放。
+云厂商的安全组也要放行对应端口。本项目容器不映射宿主机 8080，只暴露 `22`、`80`、`443` 即可。
 
 ## 3. GitHub 配置
 
@@ -259,26 +260,71 @@ cd /opt/onestarlab
 
 注意 ACR 若配置了保留策略，旧 tag 可能已被清理；重要版本建议保留。
 
-## 5. HTTPS 与反向代理
+## 5. 反向代理与 HTTPS
 
-最省事的是 Caddy：
+本项目不映射宿主机端口，容器只加入 external 网络 `proxy`；反向代理通过 `http://onestarlab:8080` 访问它。
+
+### 5.1 确认共享网络存在
 
 ```bash
-sudo apt install -y caddy
-sudo tee /etc/caddy/Caddyfile >/dev/null <<'EOF'
-lab.example.com {
-    reverse_proxy 127.0.0.1:8080
-}
-EOF
-sudo systemctl reload caddy
+docker network ls | grep proxy || docker network create proxy
 ```
 
-同时把 `.env` 的 `BIND_ADDR` 改成 `127.0.0.1` 并重新部署，避免 8080 直接暴露公网。Caddy 会自动申请和续期证书。
+如果 NPM 已经接入某个共享网络，直接用那个名字，把 `.env` 的 `PROXY_NETWORK` 改成实际名称即可。
 
-如果继续用 8080 直连，至少确认：
+### 5.2 把 NPM 接入同一网络
 
-- 云安全组只放行可信 IP；
-- 不要把 `API_TOKEN` 当成真正的登录鉴权（token 会出现在浏览器请求里）。
+NPM 的 compose 里需要声明同一个 external 网络：
+
+```yaml
+services:
+  npm:
+    networks:
+      - proxy
+
+networks:
+  proxy:
+    external: true
+```
+
+```bash
+cd <NPM目录> && docker compose up -d
+```
+
+也可以临时执行 `docker network connect proxy <npm容器名>`，但 NPM 容器重建后连接会丢失。
+
+### 5.3 在 NPM 中添加 Proxy Host
+
+- Domain Names：你的域名
+- Scheme：`http`
+- Forward Hostname：`onestarlab`
+- Forward Port：`8080`
+- 按需开启 Block Common Exploits / Websockets
+- SSL 页签申请证书并开启 Force SSL
+
+### 5.4 验证
+
+```bash
+docker network inspect proxy --format '{{range .Containers}}{{.Name}} {{end}}'
+docker exec onestarlab wget -qO- http://127.0.0.1:8080/api/v1/health
+```
+
+如果 NPM 镜像里带 wget/curl，也可以从 NPM 容器验证解析：
+
+```bash
+docker exec <npm容器名> wget -qO- http://onestarlab:8080/api/v1/health
+```
+
+最后用浏览器打开域名，确认页面和 `/api/v1` 请求都正常。
+
+### 5.5 不用 NPM 的情况
+
+如果反向代理跑在宿主机而不是容器里，它无法通过 `onestarlab` 这个 Docker DNS 访问容器。两种选择：
+
+- 临时在 compose 里加 `ports: ["127.0.0.1:8080:8080"]` 调试；
+- 或者把 Caddy/Nginx 也作为容器加入 `proxy` 网络，反向代理写 `onestarlab:8080`。
+
+不建议长期把 8080 绑定到 `0.0.0.0` 直连公网。如果确实要直连，至少限制安全组来源，并记住 `API_TOKEN` 不能替代登录鉴权。
 
 ## 6. 备份与恢复
 
@@ -347,8 +393,21 @@ docker compose logs --tail 100 onestarlab
 重点看：
 
 - `/data` 权限是否 `100:101`；
-- 8080 是否被占用；
+- 容器内 8080 是否正常监听（`docker exec onestarlab wget -qO- http://127.0.0.1:8080/api/v1/health`）；
 - 数据库文件是否损坏。
+
+### NPM 打开域名是 502 / Bad Gateway
+
+- 确认 NPM 与 `onestarlab` 在同一个 external 网络：
+
+  ```bash
+  docker network inspect proxy --format '{{range .Containers}}{{.Name}} {{end}}'
+  ```
+
+  输出里应同时有 `onestarlab` 和 NPM 的容器名。
+- NPM 的 Proxy Host 填 `onestarlab`、端口 `8080`、协议 `http`，不要填 `127.0.0.1`。
+- 先确认应用本身正常：`docker exec onestarlab wget -qO- http://127.0.0.1:8080/api/v1/health`。
+- 如果 NPM 容器重建过，检查它是否还挂在 `proxy` 网络上。
 
 ### 拉取镜像报 `no matching manifest`
 
@@ -375,6 +434,7 @@ docker image prune -a --filter "until=720h"
 - [ ] `production` 环境开启 Required reviewers
 - [ ] VPS 禁用密码登录，仅密钥登录
 - [ ] 安全组只放行 22/80/443，8080 不直接暴露
+- [ ] `onestarlab` 与 NPM 同在 `proxy` 网络，NPM 反代 `onestarlab:8080`
 - [ ] 配置 HTTPS 后再对外使用
 - [ ] 每日备份并验证可恢复
 - [ ] 定期更新 VPS 系统与 Docker
