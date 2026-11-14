@@ -80,7 +80,6 @@ backend/
 docs/                   架构、业务、开发、API 与验收文档
 Dockerfile
 compose.yaml
-deploy/                 生产部署（ACR 镜像编排、deploy.sh、backup.sh）
 data/                   Compose 挂载的 SQLite 目录（已 gitignore）
 ```
 
@@ -128,14 +127,10 @@ docker compose up --build -d
 
 生产方案：GitHub Actions 构建镜像 → 推送阿里云 ACR → Actions 通过 SSH 在 VPS 上执行 `docker compose pull && up -d`。
 
-仓库已包含：
+仓库只包含发布工作流与说明；VPS 上的 compose、`.env`、数据目录、反向代理由你自行维护，仓库里不保存这些配置。
 
-- [`.github/workflows/release.yml`](.github/workflows/release.yml)：tag 发布、构建推送、SSH 部署
-- [`deploy/docker-compose.yml`](deploy/docker-compose.yml)：VPS 侧编排（使用 ACR 镜像，加入 external `proxy` 网络，由 NPM 等反代，不映射宿主机端口）
-- [`deploy/deploy.sh`](deploy/deploy.sh)：拉取、启动、健康检查与自动回滚
-- [`deploy/backup.sh`](deploy/backup.sh)：SQLite 备份
-
-阿里云 ACR、VPS 与 GitHub Secrets 的完整配置步骤见 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)。
+- [`.github/workflows/release.yml`](.github/workflows/release.yml)：tag 发布、构建推送 ACR、SSH 部署
+- 阿里云 ACR、VPS、GitHub Secrets 的完整配置步骤见 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
 
 ## 构建与检查
 

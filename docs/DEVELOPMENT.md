@@ -33,9 +33,8 @@ Windows 上如果 PowerShell 执行策略禁止 `npm.ps1`，把命令里的 `npm
 生产发布（需要先完成 [DEPLOYMENT.md](DEPLOYMENT.md) 里的 ACR / VPS / Secrets 配置）：
 
 - 打标签发布：`git tag -a v1.0.0 -m "release v1.0.0" && git push origin v1.0.0`
-- 手动触发：GitHub Actions → Release → Run workflow
-- 检查生产编排：`docker compose -f deploy/docker-compose.yml --env-file deploy/.env.example config -q`
-- 服务器侧执行：`/opt/onestarlab/deploy.sh <tag>`
+- 手动触发：GitHub Actions → Release → Run workflow（可勾选 `skip_deploy` 只推镜像）
+- 仓库不包含 VPS 侧的 compose 与脚本；部署命令在 `VPS_APP_DIR` 下执行 `docker compose pull && up -d`
 
 说明：当前没有单元测试脚本；后端接口与页面流程按下方回归清单人工验证。
 

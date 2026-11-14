@@ -1,16 +1,10 @@
 # OneStarLab 部署指南
 
-本文描述目标生产方案：**GitHub Actions 构建镜像 → 推送到阿里云容器镜像服务（ACR）→ Actions 通过 SSH 触发 VPS 上的 `docker compose` 拉取并重启**。
+目标方案：**GitHub Actions 构建镜像 → 推送阿里云容器镜像服务（ACR）→ Actions 通过 SSH 在 VPS 上执行 `docker compose pull && docker compose up -d`**。
 
-当前代码已经包含：
+仓库只负责构建与推送；VPS 上的 compose、`.env`、数据目录、反向代理都由你自行维护，仓库里不保存这些配置。
 
-- 发布工作流：[`.github/workflows/release.yml`](../.github/workflows/release.yml)
-- 生产编排：[`deploy/docker-compose.yml`](../deploy/docker-compose.yml)
-- 部署脚本：[`deploy/deploy.sh`](../deploy/deploy.sh)（带健康检查与自动回滚）
-- 备份脚本：[`deploy/backup.sh`](../deploy/backup.sh)
-- 环境变量模板：[`deploy/.env.example`](../deploy/.env.example)
-
-> 以下阿里云 / GitHub / VPS 的账号与密钥配置需要你手工完成；本仓库只准备好了代码和脚本。
+> 以下账号、密钥、路径均为占位符，需要你在对应平台填写。
 
 ## 0. 方案总览
 
@@ -21,203 +15,156 @@ git tag v1.0.0
 GitHub Actions (release.yml)
   1. verify   npm build + go build/vet
   2. publish  docker buildx build --push
-      │        registry.cn-hangzhou.aliyuncs.com/<namespace>/onestarlab:v1.0.0
-      │        registry.cn-hangzhou.aliyuncs.com/<namespace>/onestarlab:latest
+      │        <ACR_REGISTRY>/<ACR_NAMESPACE>/onestarlab:v1.0.0
+      │        <ACR_REGISTRY>/<ACR_NAMESPACE>/onestarlab:latest
       ▼
 阿里云 ACR（私有仓库）
       │  docker compose pull
       ▼
-VPS /opt/onestarlab
-  deploy.sh：pull → up -d → 等待 healthy
-             失败则回滚到 IMAGE_TAG 记录的上一版本
+VPS 上的 <APP_DIR>
+  你的 compose 文件 + .env
+  GitHub Actions 只执行：pull → up -d → ps
       │
       ▼
-http://onestarlab:8080  （由 NPM/Caddy 反代到 https://<域名>）
+反向代理（NPM 等）→ https://<域名>
 ```
 
-设计要点：
+设计边界：
 
-- 镜像在 GitHub 构建，VPS 不需要 Node、Go 或源码，只装 Docker。
-- 发布以 tag 为准，镜像同时打 `v1.0.0`、`latest` 和构建缓存标签；回滚就是重新部署旧 tag。
-- 部署前先 `pull`，启动后轮询容器健康状态；失败自动切回 `.env` 里记录的上一版本。
-- SQLite 通过宿主机 `./data` 目录持久化，容器重建不丢数据。
+- Actions 不保存 VPS 上的 compose 内容，只执行固定的 compose 命令。
+- 镜像由 tag 决定；回滚就是把 `IMAGE_TAG` 指回旧版本再部署一次。
+- 自动健康检查和自动回滚不在 workflow 里，需要的话放在你自己的 compose healthcheck 或 VPS 脚本里。
 
-## 1. 阿里云 ACR 准备
+## 1. 阿里云 ACR
 
 ### 1.1 创建实例与仓库
 
 1. 登录阿里云控制台，进入「容器镜像服务 ACR」。
-2. 选择个人版或企业版实例：
-   - 个人版：免费、配置简单，适合单机自用。
-   - 企业版：支持 VPC 访问、镜像安全扫描、保留策略，适合长期使用。
-3. 在实例中创建命名空间，例如 `onestarlab`。
-4. 在命名空间下创建仓库：
-   - 仓库名称：`onestarlab`
-   - 类型：**私有**
-5. 在仓库的「基本信息」里记下 **公网地址**，形如：
+2. 选择个人版或企业版实例。
+3. 创建命名空间，例如 `<ACR_NAMESPACE>`。
+4. 在命名空间下创建**私有**仓库，名称必须是 `onestarlab`（与 workflow 中的仓库名一致）。
+5. 记下实例的**公网地址**，形如：
    - 个人版：`registry.cn-hangzhou.aliyuncs.com`
-   - 企业版：以控制台显示的实例域名称为准，通常是 `<实例名>-registry.<region>.cr.aliyuncs.com`
+   - 企业版：以控制台显示为准，通常为 `<实例名>-registry.<region>.cr.aliyuncs.com`
 
-后续 GitHub Secret `ACR_REGISTRY` 就填这个地址（不要带 `https://`）。
+该地址就是 `ACR_REGISTRY`，不要带 `https://`。
 
 ### 1.2 创建 RAM 用户并授权
 
-1. 进入 RAM 访问控制，创建用户 `github-actions-acr`，勾选「OpenAPI 调用访问」。
-2. 授予权限：`AliyunContainerRegistryFullAccess`（或只包含推拉镜像权限的自定义策略）。
-3. 保存 AccessKey（CI 里其实用不到 AK，但创建用户时需要）。
-4. 在 ACR 的「访问凭证」页面为该 RAM 用户**设置固定密码**。这个密码就是 `ACR_PASSWORD`，不是 RAM 登录密码。
-5. `ACR_USERNAME` 填 RAM 用户名，通常形如 `github-actions-acr@<账号别名>.onaliyun.com`，以控制台显示为准。
+1. 在 RAM 访问控制创建用户，勾选「OpenAPI 调用访问」。
+2. 授予 ACR 推拉权限：`AliyunContainerRegistryFullAccess`，或只包含目标命名空间的自定义策略。
+3. 在 ACR 的「访问凭证」页面为该用户设置**固定密码**，这就是 `ACR_PASSWORD`。
+4. `ACR_USERNAME` 填 RAM 用户名，以控制台显示为准。
 
 ### 1.3 VPS 拉取权限
 
-VPS 也需要登录 ACR 才能拉私有镜像。可以复用同一个 RAM 用户，或单独建一个只有拉取权限的账号。登录一次后凭据保存在 `~/.docker/config.json`：
+VPS 也需要登录 ACR。可以复用同一个 RAM 用户，或单独建一个只读账号。登录一次后凭据保存在该用户的 `~/.docker/config.json`。
 
-```bash
-docker login --username='<RAM用户名>' registry.cn-hangzhou.aliyuncs.com
+如果使用企业版并绑定了 VPC：GitHub 托管 runner 只能用公网地址推送；VPS 可以在 compose 里使用 VPC 地址拉取，但需要单独对 VPC 地址执行一次 `docker login`。
+
+## 2. VPS 侧准备
+
+仓库不提供 compose 文件，你需要自己维护一份，放在某个目录下（下称 `<APP_DIR>`）。
+
+### 2.1 基本要求
+
+- 已安装 Docker 与 compose 插件。
+- 执行部署的用户在 `docker` 组，或能通过 sudo 执行 docker。
+- 已存在一个供反向代理使用的 external 网络，例如 `proxy`。
+- `<APP_DIR>` 下有 compose 文件（`compose.yaml` 或 `docker-compose.yml`）和 `.env`。
+- 数据目录可被容器内运行用户写入；镜像内应用以 `uid=100` 运行。
+
+### 2.2 compose 需要满足的约定
+
+- 镜像来自 ACR：`<ACR_REGISTRY>/<ACR_NAMESPACE>/onestarlab:${IMAGE_TAG}`。
+- 必须使用 `${IMAGE_TAG}` 插值，workflow 会在远端命令里传入该变量。
+- SQLite 数据目录挂载到容器内 `/data`。
+- 容器内监听 `8080`；建议不映射宿主机端口，加入 external 网络由 NPM 反代。
+- 需要的话自行配置 `healthcheck`、日志轮转、`restart: unless-stopped`。
+
+Compose 示例结构（占位符自行替换，不要提交到仓库）：
+
+```yaml
+services:
+  onestarlab:
+    image: <ACR_REGISTRY>/<ACR_NAMESPACE>/onestarlab:${IMAGE_TAG:-latest}
+    container_name: <容器名>
+    environment:
+      PORT: "8080"
+      DATABASE_PATH: /data/onestar.db
+      WEB_DIR: /app/web
+    volumes:
+      - <数据目录>:/data
+    networks:
+      - proxy
+    restart: unless-stopped
+
+networks:
+  proxy:
+    external: true
 ```
 
-如果使用企业版并绑定了 VPC：GitHub 托管 runner 只能用公网地址推送（`ACR_REGISTRY`），VPS 可以在 `.env` 里把 `ACR_IMAGE` 写成 VPC 地址以获得更快的拉取速度，但 VPS 也必须对该 VPC 地址执行一次 `docker login`。两个地址指向同一个镜像仓库，只是入口不同。
+### 2.3 环境变量
 
-## 2. VPS 准备
-
-以下以 Ubuntu 22.04/24.04 为例，2 核 2G、20G 磁盘足够。
-
-### 2.1 安装 Docker
-
-```bash
-curl -fsSL https://get.docker.com | sudo sh
-sudo systemctl enable --now docker
-docker --version
-docker compose version
-```
-
-国内网络拉取 Docker Hub 镜像慢时，可在 `/etc/docker/daemon.json` 配置镜像加速，然后 `sudo systemctl restart docker`。
-
-### 2.2 创建部署用户
-
-```bash
-sudo adduser --disabled-password --gecos "" deploy
-sudo usermod -aG docker deploy
-sudo mkdir -p /opt/onestarlab
-sudo chown deploy:deploy /opt/onestarlab
-```
-
-> `deploy` 加入 `docker` 组等价于 root 权限，这是 Docker 的固有特性；VPS 只跑这一套服务时可以接受，务必只给可信的人密钥。
-
-### 2.3 配置 SSH 密钥
-
-在本地生成一对专用密钥（不要复用个人密钥）：
-
-```bash
-ssh-keygen -t ed25519 -C "github-actions-onestarlab" -f ~/.ssh/onestarlab_deploy
-```
-
-把公钥追加到 VPS 的 `deploy` 用户：
-
-```bash
-ssh-copy-id -i ~/.ssh/onestarlab_deploy.pub deploy@<VPS_IP>
-```
-
-可选加固：在 `/etc/ssh/sshd_config` 关闭密码登录（`PasswordAuthentication no`），并安装 fail2ban。
-
-记录主机指纹，稍后作为 `VPS_KNOWN_HOSTS`：
-
-```bash
-ssh-keyscan -p 22 -H <VPS_IP>
-```
-
-### 2.4 准备部署目录
-
-把仓库里的部署文件传到 VPS：
-
-```bash
-scp deploy/docker-compose.yml deploy/deploy.sh deploy/backup.sh deploy/.env.example \
-  deploy@<VPS_IP>:/opt/onestarlab/
-```
-
-在 VPS 上：
-
-```bash
-cd /opt/onestarlab
-cp .env.example .env
-chmod +x deploy.sh backup.sh
-sudo install -d -o 100 -g 101 data
-```
-
-`data` 目录必须属于容器内的 `uid=100(app)`、`gid=101(app)`，否则 SQLite 无法写入。
-
-编辑 `.env`：
+在 `.env` 或 compose 中配置：
 
 ```dotenv
-ACR_IMAGE=registry.cn-hangzhou.aliyuncs.com/onestarlab/onestarlab
 IMAGE_TAG=latest
-PROXY_NETWORK=proxy
-TZ=Asia/Shanghai
 API_TOKEN=
 CORS_ORIGINS=*
+TZ=Asia/Shanghai
 ```
 
 说明：
 
-- `ACR_IMAGE` 必须和 workflow 里的镜像名一致（ACR 地址 + 命名空间 + 仓库名）。
-- `PROXY_NETWORK` 是反向代理所在的 external 网络名，默认 `proxy`；部署前必须已经存在（见第 5 节）。
-- `API_TOKEN` 建议先留空。前端 token 是构建时注入的，当前镜像没有注入；如果服务端设置了非空 token，页面会 401。需要访问控制时，优先用 HTTPS + 反向代理鉴权或安全组白名单。
-- 本项目不映射宿主机端口，只通过 external 网络给反向代理访问。
+- `IMAGE_TAG` 由 workflow 传入，`.env` 里的值只作为手动执行时的默认值。
+- `API_TOKEN` 建议留空。前端 token 是构建时注入的，当前镜像没有注入；服务端设了非空值页面会 401。访问控制优先放在 HTTPS/反向代理或安全组。
+- 不要把 `.env` 提交到仓库。
 
-### 2.5 首次登录 ACR 并部署
-
-```bash
-docker login --username='<RAM用户名>' registry.cn-hangzhou.aliyuncs.com
-cd /opt/onestarlab
-./deploy.sh latest
-```
-
-首次执行时 `.env` 里还没有上一版本，健康检查失败会直接报错退出；看日志排查即可。部署前确认 external 网络已存在（见第 5 节），否则 compose 会报 `network proxy declared as external, but could not be found`。
-
-### 2.6 防火墙与端口
+### 2.4 首次登录与手动验证
 
 ```bash
-sudo ufw allow OpenSSH
-sudo ufw allow 80/tcp
-sudo ufw allow 443/tcp
-sudo ufw enable
-sudo ufw status
+cd <APP_DIR>
+docker login --username='<RAM用户名>' <ACR_REGISTRY>
+IMAGE_TAG=latest docker compose pull
 ```
 
-云厂商的安全组也要放行对应端口。本项目容器不映射宿主机 8080，只暴露 `22`、`80`、`443` 即可。
+镜像还没推送过时这一步会失败，等 Actions 发布后再试。
+
+### 2.5 防火墙
+
+只放行 `22`、`80`、`443`。本项目不需要暴露宿主机 8080。
 
 ## 3. GitHub 配置
 
-### 3.1 添加 Secrets
+### 3.1 Secrets
 
 仓库 → Settings → Secrets and variables → Actions → New repository secret：
 
-| Secret | 说明 | 示例 |
-| --- | --- | --- |
-| `ACR_REGISTRY` | ACR 公网地址，不带协议 | `registry.cn-hangzhou.aliyuncs.com` |
-| `ACR_NAMESPACE` | ACR 命名空间 | `onestarlab` |
-| `ACR_USERNAME` | RAM 用户名 | `github-actions-acr@xxx.onaliyun.com` |
-| `ACR_PASSWORD` | ACR 访问凭证的固定密码 | `********` |
-| `VPS_HOST` | VPS 公网 IP 或域名 | `47.xx.xx.xx` |
-| `VPS_PORT` | SSH 端口，留空默认 22 | `22` |
-| `VPS_USER` | 部署用户 | `deploy` |
-| `VPS_SSH_KEY` | 私钥全文（含 BEGIN/END 行） | `-----BEGIN OPENSSH PRIVATE KEY-----...` |
-| `VPS_KNOWN_HOSTS` | `ssh-keyscan` 输出；为空则每次自动扫描 | `vps.example.com ssh-ed25519 AAAA...` |
+| Secret | 说明 |
+| --- | --- |
+| `ACR_REGISTRY` | ACR 公网地址，不带协议 |
+| `ACR_NAMESPACE` | ACR 命名空间 |
+| `ACR_USERNAME` | RAM 用户名 |
+| `ACR_PASSWORD` | ACR 访问凭证的固定密码 |
+| `VPS_HOST` | VPS 公网 IP 或域名 |
+| `VPS_PORT` | SSH 端口，留空默认 22 |
+| `VPS_USER` | 部署用户（你在 VPS 上使用的用户） |
+| `VPS_SSH_KEY` | 私钥全文，含 BEGIN/END 行 |
+| `VPS_KNOWN_HOSTS` | `ssh-keyscan` 输出；为空则部署时自动扫描 |
+| `VPS_APP_DIR` | VPS 上存放 compose 文件的目录 |
+
+`VPS_APP_DIR` 是仓库里唯一提到的路径，但它的值只存在于 Secrets 中。
 
 可选 Repository variable：
 
 | Variable | 说明 |
 | --- | --- |
-| `TARGET_PLATFORM` | 构建平台，默认 `linux/amd64`；ARM 机器改成 `linux/arm64` |
+| `TARGET_PLATFORM` | 构建平台，默认 `linux/amd64`；ARM 改成 `linux/arm64` |
 
-### 3.2 创建 production 环境（可选但推荐）
+### 3.2 production 环境（可选）
 
-Settings → Environments → New environment → `production`。可以添加：
-
-- Required reviewers（部署前人工批准）
-- 部署分支限制（只允许 `main` 或 tag）
-
-如果先不建环境，workflow 里的 `environment: production` 仍然能跑，但没有保护规则。
+Settings → Environments → New environment → `production`，可添加 Required reviewers，让部署前需要人工批准。
 
 ### 3.3 触发发布
 
@@ -226,232 +173,155 @@ git tag -a v1.0.0 -m "release v1.0.0"
 git push origin v1.0.0
 ```
 
-工作流依次执行：
+工作流：
 
-1. `verify`：前端 `npm ci && npm run build`，后端 `go build ./... && go vet ./...`
-2. `publish`：构建 `linux/amd64` 镜像，推送 `v1.0.0`、`latest` 和 buildcache
-3. `deploy`：SSH 到 VPS，执行 `IMAGE_TAG=v1.0.0 ./deploy.sh`
+1. `verify`：前端构建 + 后端 `go build`/`go vet`
+2. `publish`：构建并推送 `v1.0.0`、`latest`、buildcache
+3. `deploy`：SSH 到 VPS，在 `VPS_APP_DIR` 执行 `docker compose pull && up -d --remove-orphans && ps`
 
-也可以手动触发：Actions → Release → Run workflow；`tag` 输入留空时使用 `sha-<7位提交号>`。
+也可以手动触发：Actions → Release → Run workflow。
 
-首次只验证 ACR 推送时，手动触发并勾选 `skip_deploy`（只构建推送、不部署）；确认 ACR 中能看到镜像、VPS 已准备完毕，再用 tag 跑正式发布。
+- `tag` 留空时使用 `sha-<7位提交号>`。
+- 首次只验证 ACR 推送时，勾选 `skip_deploy`，不会碰 VPS。
+
+> 手动触发要求 `release.yml` 已存在于默认分支。
 
 ## 4. 回滚
 
-### 自动回滚
+workflow 不再自动回滚。回滚方式：
 
-`deploy.sh` 在以下情况会尝试切回 `.env` 中记录的上一版本：
+1. 在 VPS 的 `<APP_DIR>` 手动执行：
 
-- `docker compose up -d` 失败
-- 容器 60 秒内没有变成 `healthy`
+   ```bash
+   IMAGE_TAG=v1.0.0 docker compose pull
+   IMAGE_TAG=v1.0.0 docker compose up -d
+   ```
 
-回滚后脚本以非零状态退出，Actions 会显示红叉，需要人工看日志。
+2. 或在 Actions 手动触发，`tag` 填旧版本号（会覆盖 `IMAGE_TAG` 并部署）。
 
-### 手动回滚
-
-VPS 上直接执行旧 tag（镜像需仍在 ACR）：
-
-```bash
-cd /opt/onestarlab
-./deploy.sh sha-abc1234
-```
-
-或在 GitHub Actions 里手动触发，`tag` 填旧版本号。
-
-注意 ACR 若配置了保留策略，旧 tag 可能已被清理；重要版本建议保留。
+ACR 的保留策略可能清理旧 tag，重要版本请保留。
 
 ## 5. 反向代理与 HTTPS
 
-本项目不映射宿主机端口，容器只加入 external 网络 `proxy`；反向代理通过 `http://onestarlab:8080` 访问它。
+容器建议只加入 external 网络，不映射宿主机端口。
 
-### 5.1 确认共享网络存在
+### 5.1 共享网络
 
 ```bash
 docker network ls | grep proxy || docker network create proxy
 ```
 
-如果 NPM 已经接入某个共享网络，直接用那个名字，把 `.env` 的 `PROXY_NETWORK` 改成实际名称即可。
+如果 NPM 已经接入某个共享网络，直接用那个名字。
 
-### 5.2 把 NPM 接入同一网络
+### 5.2 NPM 接入
 
-NPM 的 compose 里需要声明同一个 external 网络：
-
-```yaml
-services:
-  npm:
-    networks:
-      - proxy
-
-networks:
-  proxy:
-    external: true
-```
+NPM 的 compose 里声明同一个 external 网络，或临时执行：
 
 ```bash
-cd <NPM目录> && docker compose up -d
+docker network connect proxy <npm容器名>
 ```
 
-也可以临时执行 `docker network connect proxy <npm容器名>`，但 NPM 容器重建后连接会丢失。
+临时连接在 NPM 容器重建后会丢失。
 
-### 5.3 在 NPM 中添加 Proxy Host
+### 5.3 Proxy Host
 
 - Domain Names：你的域名
 - Scheme：`http`
-- Forward Hostname：`onestarlab`
+- Forward Hostname：compose 里的容器名或服务名
 - Forward Port：`8080`
-- 按需开启 Block Common Exploits / Websockets
 - SSL 页签申请证书并开启 Force SSL
 
 ### 5.4 验证
 
 ```bash
 docker network inspect proxy --format '{{range .Containers}}{{.Name}} {{end}}'
-docker exec onestarlab wget -qO- http://127.0.0.1:8080/api/v1/health
+docker exec <容器名> wget -qO- http://127.0.0.1:8080/api/v1/health
 ```
-
-如果 NPM 镜像里带 wget/curl，也可以从 NPM 容器验证解析：
-
-```bash
-docker exec <npm容器名> wget -qO- http://onestarlab:8080/api/v1/health
-```
-
-最后用浏览器打开域名，确认页面和 `/api/v1` 请求都正常。
-
-### 5.5 不用 NPM 的情况
-
-如果反向代理跑在宿主机而不是容器里，它无法通过 `onestarlab` 这个 Docker DNS 访问容器。两种选择：
-
-- 临时在 compose 里加 `ports: ["127.0.0.1:8080:8080"]` 调试；
-- 或者把 Caddy/Nginx 也作为容器加入 `proxy` 网络，反向代理写 `onestarlab:8080`。
-
-不建议长期把 8080 绑定到 `0.0.0.0` 直连公网。如果确实要直连，至少限制安全组来源，并记住 `API_TOKEN` 不能替代登录鉴权。
 
 ## 6. 备份与恢复
 
-### 自动备份
-
-安装 `sqlite3`：
+VPS 上安装 `sqlite3` 后，用 SQLite 在线备份：
 
 ```bash
-sudo apt install -y sqlite3
+cd <APP_DIR>
+mkdir -p backups
+sqlite3 data/onestar.db ".backup 'backups/onestar-$(date +%Y%m%d-%H%M%S).db'"
+gzip backups/onestar-*.db
 ```
 
-执行一次：
+加入 crontab 定期执行，并把 `backups/` 同步到其他机器或对象存储。
+
+恢复：
 
 ```bash
-cd /opt/onestarlab
-./backup.sh 14
-```
-
-加入 crontab（每天 03:00，保留 14 天）：
-
-```cron
-0 3 * * * /opt/onestarlab/backup.sh 14 >> /var/log/onestarlab-backup.log 2>&1
-```
-
-备份文件在 `/opt/onestarlab/backups/`，是 gzip 后的 SQLite 文件。建议再定期同步到对象存储或另一台机器。
-
-### 恢复
-
-```bash
-cd /opt/onestarlab
+cd <APP_DIR>
 docker compose stop
-gunzip -c backups/onestar-YYYYMMDD-HHMMSS.db.gz > data/onestar.db
-sudo chown 100:101 data/onestar.db
+gunzip -c backups/<备份文件>.db.gz > data/onestar.db
 docker compose start
 ```
 
-也可以继续用页面上的「数据中心 → 导入数据」恢复 JSON 快照，这种方式不需要停容器。
+也可以继续用页面上的「数据中心 → 导入数据」恢复 JSON 快照，不需要停容器。
 
 ## 7. 常见问题
 
-### `docker login` 失败或 push 401
+### `docker login` 失败或推送 401
 
-- 确认 `ACR_REGISTRY` 与控制台一致（个人版/企业版地址不同）。
-- 确认用的是 ACR 固定密码，不是阿里云登录密码。
-- 确认 RAM 用户有 ACR 推拉权限。
-- 在本地手工验证：
+- 确认 `ACR_REGISTRY` 与控制台一致。
+- 确认使用的是 ACR 固定密码，不是阿里云登录密码。
+- 确认 RAM 用户有目标命名空间的推拉权限。
+- 本地验证：
 
   ```bash
-  docker login --username='<RAM用户名>' registry.cn-hangzhou.aliyuncs.com
-  docker pull registry.cn-hangzhou.aliyuncs.com/<namespace>/onestarlab:latest
+  docker login --username='<RAM用户名>' <ACR_REGISTRY>
+  docker pull <ACR_REGISTRY>/<ACR_NAMESPACE>/onestarlab:latest
   ```
 
-### Actions 的 deploy 步骤 SSH 失败
+### deploy 步骤 SSH 失败
 
-- `Permission denied`：`VPS_SSH_KEY` 是否是私钥全文、公钥是否在 `deploy` 的 `authorized_keys`。
+- `Permission denied`：私钥与 `authorized_keys` 不匹配，或用户名/端口错误。
 - `Host key verification failed`：重新生成 `VPS_KNOWN_HOSTS`。
-- 连接超时：安全组/防火墙未放行 SSH 端口，或 IP 填错。
+- 连接超时：安全组/防火墙未放行 SSH 端口。
+
+### deploy 步骤报 `VPS_APP_DIR` 相关错误
+
+- 确认 secret 已配置，且路径是绝对路径。
+- 确认该目录下存在 `compose.yaml` 或 `docker-compose.yml`。
+- 确认部署用户对目录有读权限、能执行 docker。
+
+### `docker compose pull` 失败
+
+- VPS 是否已 `docker login`。
+- ACR 仓库是否私有、账号是否有拉取权限。
+- `no matching manifest`：镜像架构与 VPS 不一致，设置 `TARGET_PLATFORM`。
 
 ### 容器一直 unhealthy
 
 ```bash
-cd /opt/onestarlab
-docker compose logs --tail 100 onestarlab
+cd <APP_DIR>
+docker compose logs --tail 100
 ```
 
-重点看：
+重点看数据目录权限（容器内 `uid=100` 需可写）、端口占用、数据库文件。
 
-- `/data` 权限是否 `100:101`；
-- 容器内 8080 是否正常监听（`docker exec onestarlab wget -qO- http://127.0.0.1:8080/api/v1/health`）；
-- 数据库文件是否损坏。
+### NPM 502
 
-### NPM 打开域名是 502 / Bad Gateway
-
-- 确认 NPM 与 `onestarlab` 在同一个 external 网络：
+- 容器与 NPM 是否在同一网络：
 
   ```bash
   docker network inspect proxy --format '{{range .Containers}}{{.Name}} {{end}}'
   ```
 
-  输出里应同时有 `onestarlab` 和 NPM 的容器名。
-- NPM 的 Proxy Host 填 `onestarlab`、端口 `8080`、协议 `http`，不要填 `127.0.0.1`。
-- 先确认应用本身正常：`docker exec onestarlab wget -qO- http://127.0.0.1:8080/api/v1/health`。
-- 如果 NPM 容器重建过，检查它是否还挂在 `proxy` 网络上。
-
-### 拉取镜像报 `no matching manifest`
-
-构建平台与 VPS 架构不一致。ARM 机器设置 `TARGET_PLATFORM=linux/arm64` 后重新发布。
-
-### 页面能开但请求 401
-
-服务端 `.env` 设置了 `API_TOKEN`，而前端构建时没有注入 `VITE_API_TOKEN`。把 `API_TOKEN` 清空并重新部署，或接受在前端注入 token（本质仍是公开的，不能替代登录）。
-
-### 磁盘被旧镜像占满
-
-```bash
-docker image prune -a --filter "until=720h"
-```
-
-或给 ACR 配置保留策略，只保留最近若干个版本。
+- NPM 的 Forward Hostname 是否填容器名、端口 `8080`、协议 `http`。
+- 应用本身是否正常：`docker exec <容器名> wget -qO- http://127.0.0.1:8080/api/v1/health`。
 
 ## 8. 安全检查清单
 
-- [ ] ACR 仓库为私有，命名空间只给必要账号权限
-- [ ] 使用独立 RAM 用户，遵循最小权限
-- [ ] ACR 密码定期轮换，不写进仓库
-- [ ] GitHub Secrets 只在仓库/环境保护中配置
+- [ ] ACR 仓库为私有，RAM 用户最小权限
+- [ ] ACR 密码定期轮换，不写入仓库
+- [ ] VPS 使用专用 SSH key，禁用密码登录
 - [ ] `production` 环境开启 Required reviewers
-- [ ] VPS 禁用密码登录，仅密钥登录
-- [ ] 安全组只放行 22/80/443，8080 不直接暴露
-- [ ] `onestarlab` 与 NPM 同在 `proxy` 网络，NPM 反代 `onestarlab:8080`
+- [ ] 安全组只放行 22/80/443
+- [ ] NPM 与容器同网络，8080 不直接暴露
 - [ ] 配置 HTTPS 后再对外使用
 - [ ] 每日备份并验证可恢复
-- [ ] 定期更新 VPS 系统与 Docker
-- [ ] 关注磁盘、证书到期与容器健康状态
-
-## 9. 本地可以提前验证的部分
-
-```bash
-# 生产编排语法与插值（需要先准备一个临时 env 文件）
-docker compose -f deploy/docker-compose.yml --env-file deploy/.env.example config
-
-# Shell 脚本语法（Git Bash / WSL）
-bash -n deploy/deploy.sh
-bash -n deploy/backup.sh
-
-# 工作流语法可安装 actionlint 检查
-actionlint .github/workflows/release.yml
-```
-
-镜像构建本身依赖 ACR 凭据，第一次真正跑通需要在 GitHub 上触发 release。
+- [ ] 定期更新系统与 Docker
